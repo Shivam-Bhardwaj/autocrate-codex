@@ -85,49 +85,11 @@ function NXBoxMesh({ box }: { box: NXBox }) {
 }
 
 export default function CrateVisualizer({ boxes, showGrid = true, showLabels = true }: CrateVisualizerProps) {
-  const [tooltip, setTooltip] = useState<TooltipData>({
-    visible: false,
-    x: 0,
-    y: 0,
-    content: ''
-  })
-  const containerRef = useRef<HTMLDivElement>(null)
-
   // Filter out suppressed components
   const visibleBoxes = boxes.filter(box => !box.suppressed)
 
-  const handleMouseMove = (event: React.MouseEvent) => {
-    if (tooltip.visible) {
-      setTooltip(prev => ({
-        ...prev,
-        x: event.clientX,
-        y: event.clientY
-      }))
-    }
-  }
-
-  const handleBoxHover = (content: string) => {
-    setTooltip({
-      visible: true,
-      x: 0,
-      y: 0,
-      content
-    })
-  }
-
-  const handleBoxLeave = () => {
-    setTooltip(prev => ({
-      ...prev,
-      visible: false
-    }))
-  }
-
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full bg-gray-100 rounded-lg relative"
-      onMouseMove={handleMouseMove}
-    >
+    <div className="w-full h-full bg-gray-100 rounded-lg relative">
       <Canvas
         camera={{
           position: [15, 10, 15],
@@ -204,8 +166,6 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
             <NXBoxMesh
               key={`${box.name}-${index}`}
               box={box}
-              onHover={handleBoxHover}
-              onLeave={handleBoxLeave}
             />
           ))}
 
@@ -220,22 +180,6 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
           />
         </Suspense>
       </Canvas>
-
-      {/* Tooltip */}
-      {tooltip.visible && (
-        <div
-          className="absolute pointer-events-none z-10 bg-gray-900 text-white text-sm rounded-lg p-3 shadow-lg transition-opacity duration-200 ease-in-out"
-          style={{
-            left: tooltip.x + 10,
-            top: tooltip.y - 10,
-            transform: 'translateY(-100%)'
-          }}
-        >
-          <div className="whitespace-pre-line font-mono">
-            {tooltip.content}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

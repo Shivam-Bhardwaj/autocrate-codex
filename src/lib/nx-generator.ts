@@ -189,17 +189,118 @@ export class NXGenerator {
   }
 
   private getFloorboardCount() {
-    const floorboardDims = this.getFloorboardDimensions()
+    // Return the actual number of floorboards calculated by the layout algorithm
+    return this.getFloorboardLayout().length
+  }
+
+  private getFloorboardLayout() {
     const internalLength = this.config.product.length + (2 * this.config.clearances.end)
+    const availableLumber = this.config.materials.availableLumber || ['2x6', '2x8', '2x10', '2x12']
 
-    // Calculate how many floorboards fit across the length (Y-axis)
-    // Leave small gaps between floorboards for expansion
+    // Define all lumber options with their properties
+    const lumberOptions = [
+      { nominal: '2x6', width: 5.5, thickness: 1.5 },
+      { nominal: '2x8', width: 7.25, thickness: 1.5 },
+      { nominal: '2x10', width: 9.25, thickness: 1.5 },
+      { nominal: '2x12', width: 11.25, thickness: 1.5 }
+    ] as const
+
+    // Filter by available lumber sizes and sort by width (largest first for outside placement)
+    const availableOptions = lumberOptions
+      .filter(option => availableLumber.includes(option.nominal as '2x6' | '2x8' | '2x10' | '2x12'))
+      .sort((a, b) => b.width - a.width) // Largest first
+
+    // If no available lumber, fallback to 2x6
+    if (availableOptions.length === 0) {
+      availableOptions.push({ nominal: '2x6', width: 5.5, thickness: 1.5 })
+    }
+
+    // Calculate effective length (leave 1" on each end for panel/cleat space)
+    const effectiveLength = internalLength - 2 // 1" front + 1" back
     const gapBetweenBoards = 0.125 // 1/8" gap between boards
-    const effectiveLength = internalLength - (19 * gapBetweenBoards) // 19 gaps for 20 boards
-    const boardsNeeded = Math.ceil(effectiveLength / floorboardDims.width)
 
-    // Return minimum of calculated need or maximum of 20
-    return Math.min(boardsNeeded, 20)
+    const layout: Array<{
+      nominal: string
+      width: number
+      thickness: number
+      position: number
+      isCustom?: boolean
+    }> = []
+
+    let remainingLength = effectiveLength
+    let currentPosition = -internalLength / 2 + 1 // Start 1" from front
+
+    // Symmetric placement algorithm: place larger boards on outside, smaller toward center
+    const placedBoards: typeof layout = []
+
+    // Continue placing boards until we can't fit any more
+    while (remainingLength > 0.25 && layout.length < 20) { // Minimum 1/4" space needed
+      let boardPlaced = false
+
+      // Try each available lumber size (largest first)
+      for (const lumber of availableOptions) {
+        const boardWithGap = lumber.width + gapBetweenBoards
+
+        if (boardWithGap <= remainingLength) {
+          layout.push({
+            nominal: lumber.nominal,
+            width: lumber.width,
+            thickness: lumber.thickness,
+            position: currentPosition
+          })
+
+          currentPosition += boardWithGap
+          remainingLength -= boardWithGap
+          boardPlaced = true
+          break
+        }
+      }
+
+      // If no standard board fits, add a custom board if gap is significant
+      if (!boardPlaced) {
+        if (remainingLength >= 2) { // Only create custom board if gap is 2" or more
+          layout.push({
+            nominal: 'CUSTOM',
+            width: remainingLength - gapBetweenBoards,
+            thickness: availableOptions[availableOptions.length - 1].thickness, // Use thickness of smallest available
+            position: currentPosition,
+            isCustom: true
+          })
+        }
+        break
+      }
+    }
+
+    // Now create symmetric layout: larger boards on outside, smaller toward center
+    const symmetricLayout: typeof layout = []
+    const sortedBySize = [...layout].sort((a, b) => b.width - a.width)
+
+    let frontPosition = -internalLength / 2 + 1 // Start 1" from front
+    let backPosition = internalLength / 2 - 1   // Start 1" from back
+
+    for (let i = 0; i < sortedBySize.length; i++) {
+      const board = sortedBySize[i]
+
+      if (i % 2 === 0) {
+        // Place on front side
+        symmetricLayout.push({
+          ...board,
+          position: frontPosition
+        })
+        frontPosition += board.width + gapBetweenBoards
+      } else {
+        // Place on back side
+        backPosition -= board.width
+        symmetricLayout.push({
+          ...board,
+          position: backPosition
+        })
+        backPosition -= gapBetweenBoards
+      }
+    }
+
+    // Sort by position for final layout
+    return symmetricLayout.sort((a, b) => a.position - b.position)
   }
 
   private calculate() {
@@ -310,36 +411,42 @@ export class NXGenerator {
       type: 'skid'
     })
 
-    // Generate 20 individual floorboard components
-    const floorboardDims = this.getFloorboardDimensions()
-    const floorboardCount = this.getFloorboardCount()
-    const floorboardGap = 0.125
+    // Generate floorboard components using the new layout algorithm
+    const floorboardLayout = this.getFloorboardLayout()
 
-    // Floorboards run along X-axis (perpendicular to skids)
-    // Calculate starting position to center floorboards
-    const totalFloorboardWidth = floorboardCount * floorboardDims.width + (floorboardCount - 1) * floorboardGap
-    const startY = -totalFloorboardWidth / 2
-
-    // Create 20 individual floorboard components
-    for (let i = 1; i <= 20; i++) {
-      const isActive = i <= floorboardCount
-      const yPos = startY + (i - 1) * (floorboardDims.width + floorboardGap)
+    // Create floorboard components based on the calculated layout
+    for (let i = 0; i < floorboardLayout.length; i++) {
+      const board = floorboardLayout[i]
 
       this.boxes.push({
-        name: `FLOORBOARD_${i}`,
+        name: `FLOORBOARD_${i + 1}`,
         point1: {
           x: -internalWidth/2,
-          y: yPos,
+          y: board.position,
           z: skidDims.height
         },
         point2: {
           x: internalWidth/2,
-          y: yPos + floorboardDims.width,
-          z: skidDims.height + floorboardDims.thickness
+          y: board.position + board.width,
+          z: skidDims.height + board.thickness
         },
-        color: isActive ? '#DEB887' : '#888888', // Gray out inactive floorboards
+        color: board.isCustom ? '#FFB347' : '#DEB887', // Orange for custom boards, tan for standard
         type: 'floor',
-        suppressed: !isActive // Suppress floorboards not needed
+        suppressed: false,
+        metadata: `${board.nominal} (${board.width.toFixed(2)}" x ${board.thickness}")${board.isCustom ? ' - CUSTOM CUT' : ''}`
+      })
+    }
+
+    // Create remaining suppressed floorboard placeholders up to 20 total
+    for (let i = floorboardLayout.length; i < 20; i++) {
+      this.boxes.push({
+        name: `FLOORBOARD_${i + 1}`,
+        point1: { x: 0, y: 0, z: skidDims.height },
+        point2: { x: 0, y: 0, z: skidDims.height },
+        color: '#888888',
+        type: 'floor',
+        suppressed: true,
+        metadata: 'UNUSED - SUPPRESSED'
       })
     }
   }
