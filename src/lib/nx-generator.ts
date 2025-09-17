@@ -549,13 +549,23 @@ export class NXGenerator {
     output += '# - Skids run along Y-axis (front to back)\n'
     output += '# \n'
     output += '# FLOORBOARD INSTRUCTIONS:\n'
-    output += '# - 20 individual floorboard components (FLOORBOARD_1 through FLOORBOARD_20)\n'
+    output += '# - Optimized floorboard layout using available lumber sizes\n'
     output += '# - Floorboards run along X-axis (perpendicular to skids)\n'
     output += '# - Floorboards sit on top of skids (Z position = skid_height)\n'
-    output += '# - Only floorboard_count components should be active (unsuppressed)\n'
-    output += '# - Remaining floorboards should be suppressed\n'
+    output += '# - Symmetric placement: larger boards outside, smaller toward center\n'
+    output += '# - 1" clearance from front and back edges for panel/cleat space\n'
+    output += '# - Custom boards may be created to fill remaining gaps\n'
     output += `# - Active floorboards: ${this.expressions.get('floorboard_count')} out of 20 total\n`
-    output += `# - Floorboard lumber size: ${this.getFloorboardDimensions().nominal}\n\n`
+
+    const layout = this.getFloorboardLayout()
+    const lumberSizes = [...new Set(layout.map(b => b.nominal))].join(', ')
+    output += `# - Lumber sizes used: ${lumberSizes}\n`
+
+    const customBoards = layout.filter(b => b.isCustom)
+    if (customBoards.length > 0) {
+      output += `# - Custom boards: ${customBoards.length} (${customBoards.map(b => b.width.toFixed(2) + '"').join(', ')})\n`
+    }
+    output += '\n'
 
     // Export dimensions
     output += '# Product and Crate Dimensions\n'
@@ -573,7 +583,8 @@ export class NXGenerator {
       }
       if (box.name.startsWith('FLOORBOARD_')) {
         const suppressedText = box.suppressed ? ' (SUPPRESSED)' : ' (ACTIVE)'
-        output += `# ${box.name}${suppressedText}\n`
+        const metadataText = box.metadata ? ` - ${box.metadata}` : ''
+        output += `# ${box.name}${suppressedText}${metadataText}\n`
       }
       if (box.suppressed) {
         output += `# ${box.name}_SUPPRESSED=TRUE\n`
