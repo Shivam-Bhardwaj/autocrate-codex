@@ -5,6 +5,30 @@ All notable changes to AutoCrate NX Generator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-09-17
+
+### Added
+
+#### UI/UX Improvements
+- **Full-Screen Layout** - Revamped UI to utilize entire viewport without scrolling
+- **Maximized 3D View** - 3D visualization now uses ~80% of screen width
+- **Compact Sidebar** - Reduced sidebar to 256px for maximum visualization space
+- **Mobile Responsive** - Added hamburger menu for mobile devices
+- **Lumber Format Display** - Skid sizes now shown as lumber format (e.g., "6x6 lumber" instead of "5.5")
+- **Quick Export Access** - Export buttons moved to header for immediate access
+
+### Changed
+- Optimized spacing throughout with reduced padding and margins
+- Header height minimized to maximize content area
+- Input fields reorganized in compact grid layouts
+- Display options condensed with smaller checkboxes
+- Fixed Three.js canvas to properly fill container with CSS rules
+
+### Fixed
+- Canvas container now properly expands to full available width
+- Removed viewport width restrictions for proper full-screen usage
+- Ensured proper overflow handling for no-scroll design
+
 ## [1.1.0] - 2025-09-17
 
 ### Added
