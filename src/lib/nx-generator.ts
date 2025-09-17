@@ -271,10 +271,17 @@ export class NXGenerator {
       }
     }
 
-    // Now create symmetric layout: larger boards on outside, smaller toward center
+    // Create symmetric layout: larger boards on outside, smaller toward center
     const symmetricLayout: typeof layout = []
+
+    if (layout.length === 0) {
+      return symmetricLayout
+    }
+
+    // Sort boards by size (largest first for outside placement)
     const sortedBySize = [...layout].sort((a, b) => b.width - a.width)
 
+    // For symmetric placement, we'll place boards alternating from front and back
     let frontPosition = -internalLength / 2 + 1 // Start 1" from front
     let backPosition = internalLength / 2 - 1   // Start 1" from back
 
@@ -282,14 +289,14 @@ export class NXGenerator {
       const board = sortedBySize[i]
 
       if (i % 2 === 0) {
-        // Place on front side
+        // Place on front side (moving forward)
         symmetricLayout.push({
           ...board,
           position: frontPosition
         })
         frontPosition += board.width + gapBetweenBoards
       } else {
-        // Place on back side
+        // Place on back side (moving backward)
         backPosition -= board.width
         symmetricLayout.push({
           ...board,
@@ -299,8 +306,22 @@ export class NXGenerator {
       }
     }
 
-    // Sort by position for final layout
-    return symmetricLayout.sort((a, b) => a.position - b.position)
+    // Validate that boards don't overlap and fit within bounds
+    const sortedByPosition = symmetricLayout.sort((a, b) => a.position - b.position)
+
+    // Check for overlaps and adjust if necessary
+    for (let i = 1; i < sortedByPosition.length; i++) {
+      const prevBoard = sortedByPosition[i - 1]
+      const currentBoard = sortedByPosition[i]
+      const prevEndPosition = prevBoard.position + prevBoard.width + gapBetweenBoards
+
+      if (currentBoard.position < prevEndPosition) {
+        // Overlap detected, adjust position
+        currentBoard.position = prevEndPosition
+      }
+    }
+
+    return sortedByPosition
   }
 
   private calculate() {
