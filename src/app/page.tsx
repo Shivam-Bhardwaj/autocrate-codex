@@ -508,7 +508,7 @@ export default function Home() {
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 p-4 min-h-0">
+          <div className="flex-1 p-4 min-h-0 overflow-hidden">
             {activeTab === 'visualization' && (
               <div className="h-full flex flex-col">
                 <div className="flex-1 min-h-0">
@@ -521,8 +521,8 @@ export default function Home() {
             )}
 
             {activeTab === 'expressions' && (
-              <div className="h-full overflow-auto">
-                <pre className="text-xs bg-gray-50 p-3 rounded font-mono">
+              <div className="h-full overflow-y-auto overflow-x-auto">
+                <pre className="text-xs bg-gray-50 p-3 rounded font-mono whitespace-pre">
                   {generator.exportNXExpressions()}
                 </pre>
               </div>

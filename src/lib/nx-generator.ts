@@ -3,6 +3,7 @@
 // Origin at center of crate floor (Z=0)
 
 import { PlywoodSplicer, PanelSpliceLayout } from './plywood-splicing'
+import { CleatCalculator, PanelCleatLayout } from './cleat-calculator'
 
 export interface ProductDimensions {
   length: number  // Y-axis (front to back)
@@ -49,6 +50,7 @@ export class NXGenerator {
   private boxes: NXBox[] = []
   private expressions: Map<string, number> = new Map()
   private panelSpliceLayouts: PanelSpliceLayout[] = []
+  private panelCleatLayouts: PanelCleatLayout[] = []
 
   constructor(private config: CrateConfig) {
     this.calculate()
@@ -639,8 +641,128 @@ export class NXGenerator {
       }
     }
 
-    // Cleats disabled for now - need proper implementation
-    // TODO: Add proper cleat configuration and placement
+    // Generate cleats for each panel
+    for (let i = 0; i < this.panelCleatLayouts.length; i++) {
+      const cleatLayout = this.panelCleatLayouts[i]
+      const panelLayout = this.panelSpliceLayouts[i]
+
+      // Determine panel position for cleats
+      let panelOriginX = 0, panelOriginY = 0, panelOriginZ = 0
+      let cleatDepth = panelThickness // Cleats are on the inside face of panels
+
+      if (cleatLayout.panelName === 'FRONT_PANEL') {
+        panelOriginX = -internalWidth/2
+        panelOriginY = panelThickness // Inside face
+        panelOriginZ = skidHeight + floorboardThickness
+      } else if (cleatLayout.panelName === 'BACK_PANEL') {
+        panelOriginX = -internalWidth/2
+        panelOriginY = internalLength // Inside face
+        panelOriginZ = skidHeight + floorboardThickness
+      } else if (cleatLayout.panelName === 'LEFT_END_PANEL') {
+        panelOriginX = -internalWidth/2 // Inside face
+        panelOriginY = panelThickness
+        panelOriginZ = sideGroundClearance
+      } else if (cleatLayout.panelName === 'RIGHT_END_PANEL') {
+        panelOriginX = internalWidth/2 - 0.75 // Inside face (minus cleat thickness)
+        panelOriginY = panelThickness
+        panelOriginZ = sideGroundClearance
+      } else if (cleatLayout.panelName === 'TOP_PANEL') {
+        panelOriginX = -internalWidth/2
+        panelOriginY = 0
+        panelOriginZ = baseZ + internalHeight - 0.75 // Inside face (below panel)
+      }
+
+      // Create boxes for each cleat
+      for (const cleat of cleatLayout.cleats) {
+        let point1: Point3D, point2: Point3D
+
+        if (cleat.orientation === 'horizontal') {
+          // Horizontal cleats run along X or Y axis depending on panel
+          if (cleatLayout.panelName === 'FRONT_PANEL' || cleatLayout.panelName === 'BACK_PANEL') {
+            point1 = {
+              x: panelOriginX + cleat.x,
+              y: panelOriginY,
+              z: panelOriginZ + cleat.y
+            }
+            point2 = {
+              x: panelOriginX + cleat.x + cleat.length,
+              y: panelOriginY + cleat.thickness,
+              z: panelOriginZ + cleat.y + cleat.width
+            }
+          } else if (cleatLayout.panelName === 'LEFT_END_PANEL' || cleatLayout.panelName === 'RIGHT_END_PANEL') {
+            point1 = {
+              x: panelOriginX,
+              y: panelOriginY + cleat.x,
+              z: panelOriginZ + cleat.y
+            }
+            point2 = {
+              x: panelOriginX + cleat.thickness,
+              y: panelOriginY + cleat.x + cleat.length,
+              z: panelOriginZ + cleat.y + cleat.width
+            }
+          } else if (cleatLayout.panelName === 'TOP_PANEL') {
+            point1 = {
+              x: panelOriginX + cleat.x,
+              y: panelOriginY + cleat.y,
+              z: panelOriginZ
+            }
+            point2 = {
+              x: panelOriginX + cleat.x + cleat.length,
+              y: panelOriginY + cleat.y + cleat.width,
+              z: panelOriginZ + cleat.thickness
+            }
+          }
+        } else {
+          // Vertical cleats
+          if (cleatLayout.panelName === 'FRONT_PANEL' || cleatLayout.panelName === 'BACK_PANEL') {
+            point1 = {
+              x: panelOriginX + cleat.x,
+              y: panelOriginY,
+              z: panelOriginZ + cleat.y
+            }
+            point2 = {
+              x: panelOriginX + cleat.x + cleat.width,
+              y: panelOriginY + cleat.thickness,
+              z: panelOriginZ + cleat.y + cleat.length
+            }
+          } else if (cleatLayout.panelName === 'LEFT_END_PANEL' || cleatLayout.panelName === 'RIGHT_END_PANEL') {
+            point1 = {
+              x: panelOriginX,
+              y: panelOriginY + cleat.x,
+              z: panelOriginZ + cleat.y
+            }
+            point2 = {
+              x: panelOriginX + cleat.thickness,
+              y: panelOriginY + cleat.x + cleat.width,
+              z: panelOriginZ + cleat.y + cleat.length
+            }
+          } else if (cleatLayout.panelName === 'TOP_PANEL') {
+            point1 = {
+              x: panelOriginX + cleat.x,
+              y: panelOriginY + cleat.y,
+              z: panelOriginZ
+            }
+            point2 = {
+              x: panelOriginX + cleat.x + cleat.width,
+              y: panelOriginY + cleat.y + cleat.length,
+              z: panelOriginZ + cleat.thickness
+            }
+          }
+        }
+
+        if (point1! && point2!) {
+          this.boxes.push({
+            name: cleat.id,
+            point1: point1,
+            point2: point2,
+            color: cleat.type === 'splice' ? '#CD853F' : '#8B4513', // Different colors for splice vs regular cleats
+            type: 'cleat',
+            suppressed: true, // Cleats hidden for now
+            metadata: `${cleat.type} cleat (${cleat.orientation}, ${cleat.length.toFixed(1)}" long)`
+          })
+        }
+      }
+    }
   }
 
   private calculatePanelSplicing() {
@@ -670,19 +792,43 @@ export class NXGenerator {
       false // No bottom panel (using floorboards instead)
     )
 
-    // Store splice information in expressions for reference
-    let totalSheets = 0
+    // Calculate cleats for each panel
+    this.panelCleatLayouts = []
     for (const layout of this.panelSpliceLayouts) {
+      const cleatLayout = CleatCalculator.calculateCleatLayout(
+        layout.panelName,
+        layout.panelWidth,
+        layout.panelHeight,
+        layout.splices,
+        layout.isRotated
+      )
+      this.panelCleatLayouts.push(cleatLayout)
+    }
+
+    // Store splice and cleat information in expressions for reference
+    let totalSheets = 0
+    let totalCleats = 0
+    for (let i = 0; i < this.panelSpliceLayouts.length; i++) {
+      const layout = this.panelSpliceLayouts[i]
+      const cleatLayout = this.panelCleatLayouts[i]
       totalSheets += layout.sheetCount
+      totalCleats += cleatLayout.cleats.length
       this.expressions.set(`${layout.panelName.toLowerCase()}_splice_count`, layout.splices.length)
       this.expressions.set(`${layout.panelName.toLowerCase()}_sheet_count`, layout.sheetCount)
+      this.expressions.set(`${cleatLayout.panelName.toLowerCase()}_cleat_count`, cleatLayout.cleats.length)
     }
     this.expressions.set('total_plywood_sheets', totalSheets)
+    this.expressions.set('total_cleats', totalCleats)
 
     // Calculate material usage
     const usage = PlywoodSplicer.calculateMaterialUsage(this.panelSpliceLayouts)
     this.expressions.set('plywood_efficiency', Math.round(usage.efficiency * 100) / 100)
     this.expressions.set('plywood_waste_area', Math.round(usage.wasteArea))
+
+    // Calculate cleat material usage
+    const cleatUsage = CleatCalculator.calculateCleatMaterial(this.panelCleatLayouts)
+    this.expressions.set('cleat_linear_feet', Math.round(cleatUsage.totalLinearFeet * 100) / 100)
+    this.expressions.set('cleat_1x4_count', cleatUsage.estimated1x4Count)
   }
 
   getBoxes(): NXBox[] {
@@ -695,6 +841,10 @@ export class NXGenerator {
 
   getPanelSpliceLayouts(): PanelSpliceLayout[] {
     return this.panelSpliceLayouts
+  }
+
+  getPanelCleatLayouts(): PanelCleatLayout[] {
+    return this.panelCleatLayouts
   }
 
   exportNXExpressions(): string {
@@ -899,14 +1049,15 @@ export class NXGenerator {
       })
     }
 
-    // Cleats (simplified)
-    const cleatCount = 8 // Corner cleats minimum
+    // Cleats (using actual calculation)
+    const cleatUsage = CleatCalculator.calculateCleatMaterial(this.panelCleatLayouts)
     bom.push({
-      item: 'Cleats',
-      size: '2x4',
-      totalLength: cleatCount * internalHeight,
-      quantity: cleatCount,
-      material: 'Lumber'
+      item: 'Cleats (1x4)',
+      size: '1x4 x 8ft',
+      totalLength: cleatUsage.totalLinearFeet,
+      quantity: cleatUsage.estimated1x4Count,
+      material: 'Lumber',
+      note: `${cleatUsage.totalCleats} total cleats, ${cleatUsage.totalLinearFeet.toFixed(1)} linear feet`
     })
 
     return bom

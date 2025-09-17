@@ -20,6 +20,9 @@ export interface PanelSpliceLayout {
   sheets: PlywoodSection[]
   splices: SplicePosition[]
   sheetCount: number
+  isRotated: boolean // Whether plywood sheets are rotated 90 degrees
+  rotatedSheetWidth?: number // Effective sheet width after rotation
+  rotatedSheetHeight?: number // Effective sheet height after rotation
 }
 
 export interface PlywoodPiece {
@@ -57,33 +60,74 @@ export class PlywoodSplicer {
   private static readonly SPLICE_WIDTH = 0.125 // 1/8" for splice overlap
 
   /**
-   * Calculate optimal splicing layout for a panel
+   * Calculate optimal splicing layout for a panel with rotation optimization
    * @param panelWidth Width of the panel in inches
    * @param panelHeight Height of the panel in inches
    * @param panelName Name of the panel for identification
+   * @param allowRotation Whether to consider rotating sheets for optimization
    * @returns Optimized splice layout
    */
-  static calculateSpliceLayout(
+  static calculateOptimizedSpliceLayout(
     panelWidth: number,
     panelHeight: number,
-    panelName: string
+    panelName: string,
+    allowRotation: boolean = true
+  ): PanelSpliceLayout {
+    // Calculate layouts for both orientations
+    const normalLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
+
+    if (!allowRotation) {
+      return normalLayout
+    }
+
+    // Try rotated orientation (96x48 instead of 48x96)
+    const rotatedLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, true)
+
+    // Choose the layout with fewer sheets or better efficiency
+    if (rotatedLayout.sheetCount < normalLayout.sheetCount) {
+      return rotatedLayout
+    } else if (rotatedLayout.sheetCount === normalLayout.sheetCount) {
+      // If same sheet count, prefer fewer splices
+      return rotatedLayout.splices.length <= normalLayout.splices.length ? rotatedLayout : normalLayout
+    }
+
+    return normalLayout
+  }
+
+  /**
+   * Calculate splicing layout for a panel
+   * @param panelWidth Width of the panel in inches
+   * @param panelHeight Height of the panel in inches
+   * @param panelName Name of the panel for identification
+   * @param useRotated Whether to use rotated sheet orientation
+   * @returns Splice layout
+   */
+  private static calculateSpliceLayout(
+    panelWidth: number,
+    panelHeight: number,
+    panelName: string,
+    useRotated: boolean = false
   ): PanelSpliceLayout {
     const sections: PlywoodSection[] = []
     const splices: SplicePosition[] = []
 
+    // Determine effective sheet dimensions based on rotation
+    const sheetWidth = useRotated ? this.MAX_SHEET_HEIGHT : this.MAX_SHEET_WIDTH
+    const sheetHeight = useRotated ? this.MAX_SHEET_WIDTH : this.MAX_SHEET_HEIGHT
+
     // Calculate number of sheets needed in each direction
-    const horizontalSections = Math.ceil(panelWidth / this.MAX_SHEET_WIDTH)
-    const verticalSections = Math.ceil(panelHeight / this.MAX_SHEET_HEIGHT)
+    const horizontalSections = Math.ceil(panelWidth / sheetWidth)
+    const verticalSections = Math.ceil(panelHeight / sheetHeight)
 
     let sheetId = 0
 
     // Build panels with full sheets at top, partials at bottom
     // This ensures horizontal splices are on the bottom
-    const remainderHeight = panelHeight % this.MAX_SHEET_HEIGHT
+    const remainderHeight = panelHeight % sheetHeight
 
     for (let vSection = 0; vSection < verticalSections; vSection++) {
       for (let hSection = 0; hSection < horizontalSections; hSection++) {
-        const x = hSection * this.MAX_SHEET_WIDTH
+        const x = hSection * sheetWidth
         let y, sectionHeight
 
         if (vSection === 0 && remainderHeight > 0) {
@@ -93,13 +137,13 @@ export class PlywoodSplicer {
         } else {
           // Subsequent rows: full height pieces
           const adjustedSection = remainderHeight > 0 ? vSection - 1 : vSection
-          y = remainderHeight + (adjustedSection * this.MAX_SHEET_HEIGHT)
-          sectionHeight = Math.min(this.MAX_SHEET_HEIGHT, panelHeight - y)
+          y = remainderHeight + (adjustedSection * sheetHeight)
+          sectionHeight = Math.min(sheetHeight, panelHeight - y)
         }
 
         // Width calculation (partial on right)
         const sectionWidth = Math.min(
-          this.MAX_SHEET_WIDTH,
+          sheetWidth,
           panelWidth - x
         )
 
@@ -117,7 +161,7 @@ export class PlywoodSplicer {
         // Add vertical splice if not the rightmost section
         if (hSection < horizontalSections - 1) {
           splices.push({
-            x: (hSection + 1) * this.MAX_SHEET_WIDTH - this.SPLICE_WIDTH,
+            x: (hSection + 1) * sheetWidth - this.SPLICE_WIDTH,
             y: y,
             orientation: 'vertical'
           })
@@ -147,12 +191,15 @@ export class PlywoodSplicer {
       panelHeight,
       sheets: sections,
       splices: splices,
-      sheetCount: sheetId
+      sheetCount: sheetId,
+      isRotated: useRotated,
+      rotatedSheetWidth: useRotated ? sheetWidth : undefined,
+      rotatedSheetHeight: useRotated ? sheetHeight : undefined
     }
   }
 
   /**
-   * Calculate splicing for all 6 panels of a crate
+   * Calculate splicing for all 6 panels of a crate with rotation optimization
    * Returns layouts for: Front, Back, Left, Right, Top, Bottom(optional)
    */
   static calculateCrateSplicing(
@@ -162,24 +209,25 @@ export class PlywoodSplicer {
     sideHeight: number,
     topWidth: number,
     topLength: number,
-    includeBottom: boolean = false
+    includeBottom: boolean = false,
+    allowRotation: boolean = true
   ): PanelSpliceLayout[] {
     const layouts: PanelSpliceLayout[] = []
 
     // Front and Back panels (same dimensions)
-    layouts.push(this.calculateSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL'))
-    layouts.push(this.calculateSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL'))
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL', allowRotation))
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL', allowRotation))
 
     // Left and Right side panels (same dimensions)
-    layouts.push(this.calculateSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL'))
-    layouts.push(this.calculateSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL'))
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL', allowRotation))
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL', allowRotation))
 
     // Top panel
-    layouts.push(this.calculateSpliceLayout(topWidth, topLength, 'TOP_PANEL'))
+    layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'TOP_PANEL', allowRotation))
 
     // Bottom panel (optional - typically not used in crates with floorboards)
     if (includeBottom) {
-      layouts.push(this.calculateSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL'))
+      layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL', allowRotation))
     }
 
     return layouts
