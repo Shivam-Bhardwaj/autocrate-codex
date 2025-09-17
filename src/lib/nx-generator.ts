@@ -2,6 +2,8 @@
 // Coordinate System: X=width (left/right), Y=length (front/back), Z=height (up)
 // Origin at center of crate floor (Z=0)
 
+import { PlywoodSplicer, PanelSpliceLayout } from './plywood-splicing'
+
 export interface ProductDimensions {
   length: number  // Y-axis (front to back)
   width: number   // X-axis (left to right)
@@ -36,14 +38,17 @@ export interface NXBox {
   point1: Point3D
   point2: Point3D
   color?: string
-  type?: 'skid' | 'floor' | 'panel' | 'cleat'
+  type?: 'skid' | 'floor' | 'panel' | 'cleat' | 'plywood'
   suppressed?: boolean
   metadata?: string
+  plywoodPieceIndex?: number  // For plywood pieces, track which piece (0-5)
+  panelName?: string          // Which panel this plywood belongs to
 }
 
 export class NXGenerator {
   private boxes: NXBox[] = []
   private expressions: Map<string, number> = new Map()
+  private panelSpliceLayouts: PanelSpliceLayout[] = []
 
   constructor(private config: CrateConfig) {
     this.calculate()
@@ -397,6 +402,9 @@ export class NXGenerator {
     }
     this.expressions.set('pattern_spacing', actualSpacing)
 
+    // Calculate plywood splicing for panels FIRST
+    this.calculatePanelSplicing()
+
     // Generate geometry
     this.generateShippingBase()
     this.generateCrateCap()
@@ -509,57 +517,172 @@ export class NXGenerator {
     const baseZ = skidHeight + floorboardThickness
     const sideGroundClearance = 2  // 2 inches ground clearance for side panels
 
-    // Front Panel (sits ON skids at z = skidHeight, Y = 0)
-    this.boxes.push({
-      name: 'FRONT_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: 0, z: skidHeight },
-      point2: { x: internalWidth/2 + panelThickness, y: panelThickness, z: skidHeight + floorboardThickness + internalHeight },
-      color: '#F5DEB3',
-      type: 'panel'
-    })
+    // Generate plywood pieces for each panel based on splice layouts
+    // Each panel can have up to 6 plywood pieces
+    for (const layout of this.panelSpliceLayouts) {
+      // Determine panel position in 3D space
+      let panelOriginX = 0, panelOriginY = 0, panelOriginZ = 0
+      let isVerticalPanel = false
 
-    // Back Panel (sits ON skids at z = skidHeight, Y = internalLength + panelThickness)
-    this.boxes.push({
-      name: 'BACK_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: internalLength + panelThickness, z: skidHeight },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength + 2 * panelThickness, z: skidHeight + floorboardThickness + internalHeight },
-      color: '#F5DEB3',
-      type: 'panel'
-    })
+      if (layout.panelName === 'FRONT_PANEL') {
+        panelOriginX = -internalWidth/2 - panelThickness
+        panelOriginY = 0
+        panelOriginZ = skidHeight
+      } else if (layout.panelName === 'BACK_PANEL') {
+        panelOriginX = -internalWidth/2 - panelThickness
+        panelOriginY = internalLength + panelThickness
+        panelOriginZ = skidHeight
+      } else if (layout.panelName === 'LEFT_END_PANEL') {
+        panelOriginX = -internalWidth/2 - panelThickness
+        panelOriginY = panelThickness
+        panelOriginZ = sideGroundClearance
+        isVerticalPanel = true
+      } else if (layout.panelName === 'RIGHT_END_PANEL') {
+        panelOriginX = internalWidth/2
+        panelOriginY = panelThickness
+        panelOriginZ = sideGroundClearance
+        isVerticalPanel = true
+      } else if (layout.panelName === 'TOP_PANEL') {
+        panelOriginX = -internalWidth/2 - panelThickness
+        panelOriginY = 0
+        panelOriginZ = baseZ + internalHeight
+      }
 
-    // Left Panel (side cap - fits between front and back panels, extends close to ground)
-    // Inner wall touches the outside of skids at x = -internalWidth/2
-    // Extends down to sideGroundClearance from ground (taller than front/back panels)
-    this.boxes.push({
-      name: 'LEFT_END_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: panelThickness, z: sideGroundClearance },
-      point2: { x: -internalWidth/2, y: internalLength + panelThickness, z: skidHeight + floorboardThickness + internalHeight },
-      color: '#F5DEB3',
-      type: 'panel'
-    })
+      // Create individual plywood pieces for this panel
+      let pieceIndex = 0
+      for (const section of layout.sheets) {
+        if (pieceIndex >= 6) break // Maximum 6 pieces per panel
 
-    // Right Panel (side cap - fits between front and back panels, extends close to ground)
-    // Inner wall touches the outside of skids at x = internalWidth/2
-    // Extends down to sideGroundClearance from ground (taller than front/back panels)
-    this.boxes.push({
-      name: 'RIGHT_END_PANEL',
-      point1: { x: internalWidth/2, y: panelThickness, z: sideGroundClearance },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength + panelThickness, z: skidHeight + floorboardThickness + internalHeight },
-      color: '#F5DEB3',
-      type: 'panel'
-    })
+        // Calculate actual 3D positions for this plywood piece
+        let point1: Point3D, point2: Point3D
 
-    // Top Panel
-    this.boxes.push({
-      name: 'TOP_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: 0, z: baseZ + internalHeight },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength + 2 * panelThickness, z: baseZ + internalHeight + panelThickness },
-      color: '#F5DEB3',
-      type: 'panel'
-    })
+        if (layout.panelName === 'FRONT_PANEL' || layout.panelName === 'BACK_PANEL') {
+          point1 = {
+            x: panelOriginX + section.x,
+            y: panelOriginY,
+            z: panelOriginZ + section.y
+          }
+          point2 = {
+            x: panelOriginX + section.x + section.width,
+            y: panelOriginY + panelThickness,
+            z: panelOriginZ + section.y + section.height
+          }
+        } else if (layout.panelName === 'LEFT_END_PANEL') {
+          point1 = {
+            x: panelOriginX,
+            y: panelOriginY + section.x,
+            z: panelOriginZ + section.y
+          }
+          point2 = {
+            x: panelOriginX + panelThickness,
+            y: panelOriginY + section.x + section.width,
+            z: panelOriginZ + section.y + section.height
+          }
+        } else if (layout.panelName === 'RIGHT_END_PANEL') {
+          point1 = {
+            x: panelOriginX,
+            y: panelOriginY + section.x,
+            z: panelOriginZ + section.y
+          }
+          point2 = {
+            x: panelOriginX + panelThickness,
+            y: panelOriginY + section.x + section.width,
+            z: panelOriginZ + section.y + section.height
+          }
+        } else if (layout.panelName === 'TOP_PANEL') {
+          point1 = {
+            x: panelOriginX + section.x,
+            y: panelOriginY + section.y,
+            z: panelOriginZ
+          }
+          point2 = {
+            x: panelOriginX + section.x + section.width,
+            y: panelOriginY + section.y + section.height,
+            z: panelOriginZ + panelThickness
+          }
+        } else {
+          continue
+        }
+
+        // Create the plywood piece box
+        this.boxes.push({
+          name: `${layout.panelName}_PLY_${pieceIndex + 1}`,
+          point1: point1,
+          point2: point2,
+          color: pieceIndex === 0 ? '#F5DEB3' : pieceIndex === 1 ? '#FFE4B5' :
+                 pieceIndex === 2 ? '#FFDEAD' : pieceIndex === 3 ? '#F4E4C1' :
+                 pieceIndex === 4 ? '#E6D2A3' : '#D4C29C',
+          type: 'plywood',
+          plywoodPieceIndex: pieceIndex,
+          panelName: layout.panelName,
+          suppressed: pieceIndex >= layout.sheets.length, // Suppress unused pieces
+          metadata: `Plywood piece ${pieceIndex + 1} of ${layout.sheets.length} (${section.width.toFixed(1)}" x ${section.height.toFixed(1)}")`
+        })
+
+        pieceIndex++
+      }
+
+      // Fill remaining slots with suppressed placeholders
+      while (pieceIndex < 6) {
+        this.boxes.push({
+          name: `${layout.panelName}_PLY_${pieceIndex + 1}`,
+          point1: { x: 0, y: 0, z: 0 },
+          point2: { x: 0, y: 0, z: 0 },
+          color: '#888888',
+          type: 'plywood',
+          plywoodPieceIndex: pieceIndex,
+          panelName: layout.panelName,
+          suppressed: true,
+          metadata: 'UNUSED - SUPPRESSED'
+        })
+        pieceIndex++
+      }
+    }
 
     // Cleats disabled for now - need proper implementation
     // TODO: Add proper cleat configuration and placement
+  }
+
+  private calculatePanelSplicing() {
+    const internalWidth = this.expressions.get('internal_width')!
+    const internalLength = this.expressions.get('internal_length')!
+    const internalHeight = this.expressions.get('internal_height')!
+    const panelThickness = this.expressions.get('panel_thickness')!
+    const skidHeight = this.expressions.get('skid_height')!
+    const floorboardThickness = this.expressions.get('floorboard_thickness')!
+
+    // Calculate actual panel dimensions
+    const frontBackWidth = internalWidth + 2 * panelThickness
+    const frontBackHeight = internalHeight + floorboardThickness
+    const sideWidth = internalLength
+    const sideHeight = internalHeight + floorboardThickness + skidHeight - 2 // Side panels extend lower
+    const topWidth = internalWidth + 2 * panelThickness
+    const topLength = internalLength + 2 * panelThickness
+
+    // Calculate splicing layouts for all panels
+    this.panelSpliceLayouts = PlywoodSplicer.calculateCrateSplicing(
+      frontBackWidth,
+      frontBackHeight,
+      sideWidth,
+      sideHeight,
+      topWidth,
+      topLength,
+      false // No bottom panel (using floorboards instead)
+    )
+
+    // Store splice information in expressions for reference
+    let totalSheets = 0
+    for (const layout of this.panelSpliceLayouts) {
+      totalSheets += layout.sheetCount
+      this.expressions.set(`${layout.panelName.toLowerCase()}_splice_count`, layout.splices.length)
+      this.expressions.set(`${layout.panelName.toLowerCase()}_sheet_count`, layout.sheetCount)
+    }
+    this.expressions.set('total_plywood_sheets', totalSheets)
+
+    // Calculate material usage
+    const usage = PlywoodSplicer.calculateMaterialUsage(this.panelSpliceLayouts)
+    this.expressions.set('plywood_efficiency', Math.round(usage.efficiency * 100) / 100)
+    this.expressions.set('plywood_waste_area', Math.round(usage.wasteArea))
   }
 
   getBoxes(): NXBox[] {
@@ -570,11 +693,22 @@ export class NXGenerator {
     return this.expressions
   }
 
+  getPanelSpliceLayouts(): PanelSpliceLayout[] {
+    return this.panelSpliceLayouts
+  }
+
   exportNXExpressions(): string {
     let output = '# NX Expressions for AutoCrate\n'
     output += '# Generated: ' + new Date().toISOString() + '\n'
     output += '# Coordinate System: X=width, Y=length, Z=height\n'
     output += '# Origin at center of crate floor (Z=0)\n'
+    output += '# \n'
+    output += '# PLYWOOD SPLICING INFORMATION:\n'
+    output += '# - Maximum sheet size: 48" x 96"\n'
+    output += '# - Vertical splices positioned on RIGHT side\n'
+    output += '# - Horizontal splices positioned on BOTTOM\n'
+    output += `# - Total plywood sheets required: ${this.expressions.get('total_plywood_sheets') || 0}\n`
+    output += `# - Material efficiency: ${this.expressions.get('plywood_efficiency') || 0}%\n`
     output += '# \n'
     output += '# SKID PATTERN INSTRUCTIONS:\n'
     output += '# - Create single SKID component at leftmost position\n'
@@ -608,6 +742,33 @@ export class NXGenerator {
       output += `${key}=${value.toFixed(3)}\n`
     }
 
+    // Export panel splice details
+    output += '\n# PANEL SPLICE LAYOUTS\n'
+    for (const layout of this.panelSpliceLayouts) {
+      output += `\n# ${layout.panelName}\n`
+      output += `# Panel size: ${layout.panelWidth.toFixed(1)}" x ${layout.panelHeight.toFixed(1)}"\n`
+      output += `# Sheets required: ${layout.sheetCount}\n`
+      output += `# Splices: ${layout.splices.length}\n`
+
+      // Export splice positions
+      if (layout.splices.length > 0) {
+        for (let i = 0; i < layout.splices.length; i++) {
+          const splice = layout.splices[i]
+          output += `${layout.panelName}_SPLICE_${i}_X=${splice.x.toFixed(3)}\n`
+          output += `${layout.panelName}_SPLICE_${i}_Y=${splice.y.toFixed(3)}\n`
+          output += `${layout.panelName}_SPLICE_${i}_TYPE="${splice.orientation}"\n`
+        }
+      }
+
+      // Export sheet sections
+      for (const section of layout.sheets) {
+        output += `${section.id}_X=${section.x.toFixed(3)}\n`
+        output += `${section.id}_Y=${section.y.toFixed(3)}\n`
+        output += `${section.id}_WIDTH=${section.width.toFixed(3)}\n`
+        output += `${section.id}_HEIGHT=${section.height.toFixed(3)}\n`
+      }
+    }
+
     // Export component positions
     output += '\n# Component Positions (Two Diagonal Points)\n'
     for (const box of this.boxes) {
@@ -621,15 +782,35 @@ export class NXGenerator {
         const metadataText = box.metadata ? ` - ${box.metadata}` : ''
         output += `# ${box.name}${suppressedText}${metadataText}\n`
       }
-      if (box.suppressed) {
-        output += `# ${box.name}_SUPPRESSED=TRUE\n`
+      if (box.type === 'plywood') {
+        const suppressedText = box.suppressed ? ' (SUPPRESSED)' : ' (ACTIVE)'
+        output += `# Panel: ${box.panelName}, Piece ${(box.plywoodPieceIndex || 0) + 1}/6${suppressedText}\n`
+        if (box.metadata) {
+          output += `# ${box.metadata}\n`
+        }
+        // Export 7 parameters for plywood pieces
+        output += `# 7 PLYWOOD PARAMETERS:\n`
+        output += `${box.name}_X=${box.point1.x.toFixed(3)}\n`
+        output += `${box.name}_Y=${box.point1.y.toFixed(3)}\n`
+        output += `${box.name}_Z=${box.point1.z.toFixed(3)}\n`
+        output += `${box.name}_WIDTH=${Math.abs(box.point2.x - box.point1.x).toFixed(3)}\n`
+        output += `${box.name}_LENGTH=${Math.abs(box.point2.y - box.point1.y).toFixed(3)}\n`
+        output += `${box.name}_HEIGHT=${Math.abs(box.point2.z - box.point1.z).toFixed(3)}\n`
+        output += `${box.name}_THICKNESS=${this.expressions.get('panel_thickness')?.toFixed(3) || '1.000'}\n`
+        if (box.suppressed) {
+          output += `${box.name}_SUPPRESSED=TRUE\n`
+        }
+      } else {
+        if (box.suppressed) {
+          output += `# ${box.name}_SUPPRESSED=TRUE\n`
+        }
+        output += `${box.name}_X1=${box.point1.x.toFixed(3)}\n`
+        output += `${box.name}_Y1=${box.point1.y.toFixed(3)}\n`
+        output += `${box.name}_Z1=${box.point1.z.toFixed(3)}\n`
+        output += `${box.name}_X2=${box.point2.x.toFixed(3)}\n`
+        output += `${box.name}_Y2=${box.point2.y.toFixed(3)}\n`
+        output += `${box.name}_Z2=${box.point2.z.toFixed(3)}\n`
       }
-      output += `${box.name}_X1=${box.point1.x.toFixed(3)}\n`
-      output += `${box.name}_Y1=${box.point1.y.toFixed(3)}\n`
-      output += `${box.name}_Z1=${box.point1.z.toFixed(3)}\n`
-      output += `${box.name}_X2=${box.point2.x.toFixed(3)}\n`
-      output += `${box.name}_Y2=${box.point2.y.toFixed(3)}\n`
-      output += `${box.name}_Z2=${box.point2.z.toFixed(3)}\n`
     }
 
     return output
@@ -689,30 +870,34 @@ export class NXGenerator {
       })
     }
 
-    // Panels
-    bom.push({
-      item: 'Front/Back Panel',
-      size: `${internalWidth + 2*panelThickness}" x ${internalHeight}"`,
-      thickness: panelThickness,
-      quantity: 2,
-      material: 'Plywood'
-    })
+    // Plywood Sheets (48x96)
+    const totalSheets = this.expressions.get('total_plywood_sheets') || 0
+    const efficiency = this.expressions.get('plywood_efficiency') || 0
 
     bom.push({
-      item: 'Side Panel',
-      size: `${internalLength}" x ${internalHeight}"`,
+      item: 'Plywood Sheet (48"x96")',
+      size: '48" x 96"',
       thickness: panelThickness,
-      quantity: 2,
-      material: 'Plywood'
+      quantity: totalSheets,
+      material: 'Plywood',
+      note: `Material efficiency: ${efficiency}%. Splices: vertical on right, horizontal on bottom.`
     })
 
-    bom.push({
-      item: 'Top Panel',
-      size: `${internalWidth + 2*panelThickness}" x ${internalLength + 2*panelThickness}"`,
-      thickness: panelThickness,
-      quantity: 1,
-      material: 'Plywood'
-    })
+    // Panel details with splice information
+    for (const layout of this.panelSpliceLayouts) {
+      const panelCount = layout.panelName.includes('FRONT') || layout.panelName.includes('BACK') ||
+                         layout.panelName.includes('LEFT') || layout.panelName.includes('RIGHT') ? 1 :
+                         layout.panelName === 'TOP_PANEL' ? 1 : 1
+
+      bom.push({
+        item: layout.panelName.replace(/_/g, ' '),
+        size: `${layout.panelWidth.toFixed(1)}" x ${layout.panelHeight.toFixed(1)}"`,
+        thickness: panelThickness,
+        quantity: panelCount,
+        material: 'Plywood Panel',
+        note: `Requires ${layout.sheetCount} sheets, ${layout.splices.length} splices`
+      })
+    }
 
     // Cleats (simplified)
     const cleatCount = 8 // Corner cleats minimum

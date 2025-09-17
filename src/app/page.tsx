@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import CrateVisualizer from '@/components/CrateVisualizer'
 import { NXGenerator, CrateConfig } from '@/lib/nx-generator'
+import { PlywoodPieceSelector } from '@/components/PlywoodPieceSelector'
 
 export default function Home() {
   // Store input values as strings for better input handling
@@ -62,8 +63,21 @@ export default function Home() {
   })
 
   const [generator, setGenerator] = useState<NXGenerator>(() => new NXGenerator(config))
-  const [activeTab, setActiveTab] = useState<'visualization' | 'expressions' | 'bom'>('visualization')
+  const [activeTab, setActiveTab] = useState<'visualization' | 'expressions' | 'bom' | 'plywood'>('visualization')
   const [showMobileInputs, setShowMobileInputs] = useState(false)
+  // Initialize all plywood pieces as visible by default
+  const [plywoodPieceVisibility, setPlywoodPieceVisibility] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    // Set all plywood pieces to visible by default
+    for (let i = 1; i <= 6; i++) {
+      initial[`FRONT_PANEL_PLY_${i}`] = true
+      initial[`BACK_PANEL_PLY_${i}`] = true
+      initial[`LEFT_END_PANEL_PLY_${i}`] = true
+      initial[`RIGHT_END_PANEL_PLY_${i}`] = true
+      initial[`TOP_PANEL_PLY_${i}`] = true
+    }
+    return initial
+  })
   const debounceTimeoutRef = useRef<{ [key: string]: NodeJS.Timeout }>({})
 
   // Update generator when config changes or 3x4 lumber permission changes
@@ -189,7 +203,22 @@ export default function Home() {
       if (box.type === 'floor' && !displayOptions.visibility.floorboards) return false
       if (box.type === 'cleat' && !displayOptions.visibility.cleats) return false
 
-      // Individual panel visibility
+      // Handle plywood pieces based on individual selection
+      if (box.type === 'plywood') {
+        // Don't show suppressed pieces
+        if (box.suppressed) return false
+        // Check panel visibility based on panel name
+        if (box.panelName === 'FRONT_PANEL' && !displayOptions.visibility.frontPanel) return false
+        if (box.panelName === 'BACK_PANEL' && !displayOptions.visibility.backPanel) return false
+        if (box.panelName === 'LEFT_END_PANEL' && !displayOptions.visibility.leftPanel) return false
+        if (box.panelName === 'RIGHT_END_PANEL' && !displayOptions.visibility.rightPanel) return false
+        if (box.panelName === 'TOP_PANEL' && !displayOptions.visibility.topPanel) return false
+        // Check individual piece visibility (default to true if not set)
+        if (plywoodPieceVisibility[box.name] === false) return false
+        return true
+      }
+
+      // Legacy panel visibility (for non-plywood mode)
       if (box.name === 'FRONT_PANEL' && !displayOptions.visibility.frontPanel) return false
       if (box.name === 'BACK_PANEL' && !displayOptions.visibility.backPanel) return false
       if (box.name === 'LEFT_END_PANEL' && !displayOptions.visibility.leftPanel) return false
@@ -198,6 +227,13 @@ export default function Home() {
 
       return true
     })
+  }
+
+  const handlePlywoodPieceToggle = (pieceName: string) => {
+    setPlywoodPieceVisibility(prev => ({
+      ...prev,
+      [pieceName]: !prev[pieceName]
+    }))
   }
 
   return (
@@ -458,6 +494,16 @@ export default function Home() {
               >
                 BOM
               </button>
+              <button
+                onClick={() => setActiveTab('plywood')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === 'plywood'
+                    ? 'border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Plywood Pieces
+              </button>
             </nav>
           </div>
 
@@ -504,6 +550,15 @@ export default function Home() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'plywood' && (
+              <div className="h-full overflow-auto">
+                <PlywoodPieceSelector
+                  boxes={generator.getBoxes()}
+                  onPieceToggle={handlePlywoodPieceToggle}
+                />
               </div>
             )}
           </div>

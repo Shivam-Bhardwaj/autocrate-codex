@@ -5,6 +5,31 @@ All notable changes to AutoCrate NX Generator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-09-17
+
+### Added
+
+#### Plywood Splicing System
+- **Individual Plywood Pieces** - Panels now composed of up to 6 individual plywood pieces instead of single panels
+- **48x96 Sheet Optimization** - Automatic calculation of optimal splicing for standard 48" x 96" plywood sheets
+- **Splice Positioning Rules** - Vertical splices on right side, horizontal splices on bottom for consistent assembly
+- **7-Parameter System** - Each plywood piece exports with 7 NX parameters (X, Y, Z, Width, Length, Height, Thickness)
+- **Individual Piece Selection** - New "Plywood Pieces" tab for toggling individual pieces on/off
+- **Visual Differentiation** - Different colors for each plywood piece showing splice boundaries in 3D view
+- **Automatic Suppression** - Unused plywood slots automatically suppressed in NX expressions
+- **130" Panel Support** - System handles panels up to 130" using 6 plywood pieces maximum
+
+### Changed
+- Panels now render as multiple plywood pieces with visible splice lines in 3D visualization
+- Removed separate "Plywood Splicing" visualization tab - splicing now evident in main 3D model
+- BOM updated to show individual plywood sheet requirements and efficiency metrics
+- NX expressions now export individual plywood pieces with full parameter sets
+
+### Fixed
+- Panel visibility initialization to show plywood pieces by default
+- Splice layout calculation order to ensure proper panel generation
+- Horizontal splice positioning to correctly place partial sheets at bottom
+
 ## [1.2.0] - 2025-09-17
 
 ### Added
