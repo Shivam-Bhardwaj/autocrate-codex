@@ -1,19 +1,22 @@
 import type { Metadata } from 'next'
-import { ReactNode } from 'react'
+import { Inter } from 'next/font/google'
 import './globals.css'
-import { Providers } from './providers/Providers'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AutoCrate Platform',
-  description: 'Progressive Web App for automated crate design and NX integration'
+  title: 'AutoCrate - NX Expression Generator',
+  description: 'Generate NX expressions for shipping crate design',
 }
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-950 text-slate-100">
-        <Providers>{children}</Providers>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   )
 }
