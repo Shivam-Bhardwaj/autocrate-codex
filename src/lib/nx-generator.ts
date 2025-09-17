@@ -123,30 +123,23 @@ export class NXGenerator {
     const skidDims = this.getSkidDimensions()
 
     // Calculate actual number of skids needed based on max center-to-center spacing
-    // We need to check if the skids can fit with the maximum allowed spacing
+    // IMPORTANT: Always place skids at the extreme ends (edges)
 
-    // Start with the minimum count from the table
-    let requiredCount = spacingInfo.count
-
-    // Check if we need more skids to maintain max spacing
-    // For n skids, we have (n-1) spaces between centers
-    // Total span = (n-1) * maxSpacing + skidWidth (for the skid itself)
-    while (requiredCount > 1) {
-      const totalSpan = (requiredCount - 1) * spacingInfo.maxSpacing + skidDims.width
-      if (totalSpan <= internalWidth) {
-        // This number of skids fits within max spacing
-        break
-      }
-      // Need more skids to maintain spacing requirement
-      requiredCount++
-
-      // Safety check to prevent infinite loop
-      if (requiredCount > 10) {
-        break
-      }
+    // Minimum 2 skids at the edges
+    if (internalWidth <= spacingInfo.maxSpacing + skidDims.width) {
+      return 2  // Just edge skids
     }
 
-    return requiredCount
+    // For wider crates, calculate how many skids we need
+    // Available space for intermediate skids = internalWidth - 2 * (skidWidth/2 for edge skids)
+    const availableSpace = internalWidth - skidDims.width
+
+    // Calculate number of gaps needed (n skids = n-1 gaps)
+    const numberOfGaps = Math.ceil(availableSpace / spacingInfo.maxSpacing)
+    const requiredCount = numberOfGaps + 1
+
+    // Ensure we have at least the minimum from the spec table
+    return Math.max(requiredCount, spacingInfo.count)
   }
 
   private getFloorboardDimensions() {
@@ -196,6 +189,7 @@ export class NXGenerator {
   private getFloorboardLayout() {
     const internalLength = this.config.product.length + (2 * this.config.clearances.end)
     const availableLumber = this.config.materials.availableLumber || ['2x6', '2x8', '2x10', '2x12']
+    const panelThickness = this.config.materials.panelThickness
 
     // Define all lumber options with their properties
     const lumberOptions = [
@@ -215,8 +209,9 @@ export class NXGenerator {
       availableOptions.push({ nominal: '2x6', width: 5.5, thickness: 1.5 })
     }
 
-    // Calculate effective length (leave 1" on each end for panel/cleat space)
-    const effectiveLength = internalLength - 2 // 1" front + 1" back
+    // Calculate effective length - floorboards run between the inside faces of panels
+    // From Y = panelThickness to Y = internalLength + panelThickness
+    const effectiveLength = internalLength // Just the internal length
     const gapBetweenBoards = 0.125 // 1/8" gap between boards
 
     const layout: Array<{
@@ -228,13 +223,13 @@ export class NXGenerator {
     }> = []
 
     let remainingLength = effectiveLength
-    let currentPosition = -internalLength / 2 + 1 // Start 1" from front
+    let currentPosition = panelThickness // Start at inside face of front panel
 
     // Symmetric placement algorithm: place larger boards on outside, smaller toward center
     const placedBoards: typeof layout = []
 
     // Continue placing boards until we can't fit any more
-    while (remainingLength > 0.25 && layout.length < 20) { // Minimum 1/4" space needed
+    while (remainingLength > 0.25 && layout.length < 40) { // Increased limit to 40 boards
       let boardPlaced = false
 
       // Try each available lumber size (largest first)
@@ -256,16 +251,26 @@ export class NXGenerator {
         }
       }
 
-      // If no standard board fits, add a custom board if gap is significant
+      // If no standard board fits, try to add a custom board
       if (!boardPlaced) {
-        if (remainingLength >= 2) { // Only create custom board if gap is 2" or more
-          layout.push({
-            nominal: 'CUSTOM',
-            width: remainingLength - gapBetweenBoards,
-            thickness: availableOptions[availableOptions.length - 1].thickness, // Use thickness of smallest available
-            position: currentPosition,
-            isCustom: true
-          })
+        // Check if remaining length can accommodate a custom board
+        // Custom board must be at least 0.25" wide
+        if (remainingLength >= 0.25) {
+          // Account for gap if there's a next board
+          const customWidth = remainingLength > gapBetweenBoards ?
+                             remainingLength - gapBetweenBoards :
+                             remainingLength
+
+          // Only add custom board if it's at least 0.25" wide
+          if (customWidth >= 0.25) {
+            layout.push({
+              nominal: 'CUSTOM',
+              width: customWidth,
+              thickness: availableOptions[0].thickness, // Use standard thickness
+              position: currentPosition,
+              isCustom: true
+            })
+          }
         }
         break
       }
@@ -282,8 +287,8 @@ export class NXGenerator {
     const sortedBySize = [...layout].sort((a, b) => b.width - a.width)
 
     // For symmetric placement, we'll place boards alternating from front and back
-    let frontPosition = -internalLength / 2 + 1 // Start 1" from front
-    let backPosition = internalLength / 2 - 1   // Start 1" from back
+    let frontPosition = panelThickness // Start at inside face of front panel
+    let backPosition = internalLength + panelThickness   // End at inside face of back panel
 
     for (let i = 0; i < sortedBySize.length; i++) {
       const board = sortedBySize[i]
@@ -405,32 +410,53 @@ export class NXGenerator {
     const panelThickness = this.expressions.get('panel_thickness')!
     const patternSpacing = this.expressions.get('pattern_spacing')!
 
-    // Create single skid at leftmost position (to be patterned)
-    // Skid runs along Y-axis (front to back)
+    // Create skids - ALWAYS place at extreme edges for multiple skids
+    // Skid runs along Y-axis (front to back) - FULL LENGTH INCLUDING PANELS
     // Pattern will be along X-axis (left to right)
 
-    // Calculate leftmost skid position
-    let leftmostCenterX: number
+    // Calculate skid positions
+    let skidPositions: number[] = []
+
     if (skidCount === 1) {
       // Single skid at center
-      leftmostCenterX = 0
+      skidPositions = [0]
+    } else if (skidCount === 2) {
+      // Two skids at extreme edges
+      const edgeOffset = (internalWidth / 2) - (skidDims.width / 2)
+      skidPositions = [-edgeOffset, edgeOffset]
     } else {
-      // Multiple skids: calculate starting position for proper centering
-      const totalPatternSpan = (skidCount - 1) * patternSpacing
-      leftmostCenterX = -totalPatternSpan / 2
+      // Multiple skids: edges + evenly spaced intermediates
+      const edgeOffset = (internalWidth / 2) - (skidDims.width / 2)
+
+      // Calculate spacing between skids (edge to edge)
+      const availableSpan = 2 * edgeOffset  // Total span from leftmost to rightmost skid center
+      const actualSpacing = availableSpan / (skidCount - 1)
+
+      for (let i = 0; i < skidCount; i++) {
+        const position = -edgeOffset + (i * actualSpacing)
+        skidPositions.push(position)
+      }
     }
 
-    const leftmostX = leftmostCenterX - skidDims.width / 2
+    // Create all skids based on calculated positions
+    // SKIDS RUN FULL LENGTH FROM FRONT PANEL TO BACK PANEL
+    // Y=0 is at the front of the crate (where skids start)
+    const skidStartY = 0  // Start at Y=0 (front)
+    const skidEndY = internalLength + 2 * panelThickness  // End at back panel
 
-    // Create single skid component (leftmost position)
-    // This will be patterned in NX using pattern_count and pattern_spacing
-    this.boxes.push({
-      name: 'SKID',
-      point1: { x: leftmostX, y: 0, z: 0 },
-      point2: { x: leftmostX + skidDims.width, y: internalLength, z: skidDims.height },
-      color: '#8B4513',
-      type: 'skid'
-    })
+    for (let i = 0; i < skidPositions.length; i++) {
+      const skidCenterX = skidPositions[i]
+      const skidX = skidCenterX - skidDims.width / 2
+
+      this.boxes.push({
+        name: i === 0 ? 'SKID' : `SKID_PATTERN_${i}`,
+        point1: { x: skidX, y: skidStartY, z: 0 },
+        point2: { x: skidX + skidDims.width, y: skidEndY, z: skidDims.height },
+        color: '#8B4513',
+        type: 'skid',
+        metadata: i === 0 ? 'Base skid (to be patterned in NX)' : `Pattern instance ${i}`
+      })
+    }
 
     // Generate floorboard components using the new layout algorithm
     const floorboardLayout = this.getFloorboardLayout()
@@ -443,7 +469,7 @@ export class NXGenerator {
         name: `FLOORBOARD_${i + 1}`,
         point1: {
           x: -internalWidth/2,
-          y: board.position,
+          y: board.position,  // Position is already in correct Y coordinate
           z: skidDims.height
         },
         point2: {
@@ -458,8 +484,8 @@ export class NXGenerator {
       })
     }
 
-    // Create remaining suppressed floorboard placeholders up to 20 total
-    for (let i = floorboardLayout.length; i < 20; i++) {
+    // Create remaining suppressed floorboard placeholders up to 40 total
+    for (let i = floorboardLayout.length; i < 40; i++) {
       this.boxes.push({
         name: `FLOORBOARD_${i + 1}`,
         point1: { x: 0, y: 0, z: skidDims.height },
@@ -482,20 +508,20 @@ export class NXGenerator {
 
     const baseZ = skidHeight + floorboardThickness
 
-    // Front Panel (sits on skids, Y = -internalLength/2)
+    // Front Panel (sits ON skids at z = skidHeight, Y = 0)
     this.boxes.push({
       name: 'FRONT_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: -internalLength/2 - panelThickness, z: 0 },
-      point2: { x: internalWidth/2 + panelThickness, y: -internalLength/2, z: skidHeight + floorboardThickness + internalHeight },
+      point1: { x: -internalWidth/2 - panelThickness, y: 0, z: skidHeight },
+      point2: { x: internalWidth/2 + panelThickness, y: panelThickness, z: skidHeight + floorboardThickness + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
 
-    // Back Panel (sits on skids, Y = internalLength/2)
+    // Back Panel (sits ON skids at z = skidHeight, Y = internalLength + panelThickness)
     this.boxes.push({
       name: 'BACK_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: internalLength/2, z: 0 },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength/2 + panelThickness, z: skidHeight + floorboardThickness + internalHeight },
+      point1: { x: -internalWidth/2 - panelThickness, y: internalLength + panelThickness, z: skidHeight },
+      point2: { x: internalWidth/2 + panelThickness, y: internalLength + 2 * panelThickness, z: skidHeight + floorboardThickness + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
@@ -503,8 +529,8 @@ export class NXGenerator {
     // Left Panel (touches outside of skids)
     this.boxes.push({
       name: 'LEFT_END_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: -internalLength/2, z: baseZ },
-      point2: { x: -internalWidth/2, y: internalLength/2, z: baseZ + internalHeight },
+      point1: { x: -internalWidth/2 - panelThickness, y: panelThickness, z: baseZ },
+      point2: { x: -internalWidth/2, y: internalLength + panelThickness, z: baseZ + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
@@ -512,8 +538,8 @@ export class NXGenerator {
     // Right Panel (touches outside of skids)
     this.boxes.push({
       name: 'RIGHT_END_PANEL',
-      point1: { x: internalWidth/2, y: -internalLength/2, z: baseZ },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength/2, z: baseZ + internalHeight },
+      point1: { x: internalWidth/2, y: panelThickness, z: baseZ },
+      point2: { x: internalWidth/2 + panelThickness, y: internalLength + panelThickness, z: baseZ + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
@@ -521,31 +547,14 @@ export class NXGenerator {
     // Top Panel
     this.boxes.push({
       name: 'TOP_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: -internalLength/2 - panelThickness, z: baseZ + internalHeight },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength/2 + panelThickness, z: baseZ + internalHeight + panelThickness },
+      point1: { x: -internalWidth/2 - panelThickness, y: 0, z: baseZ + internalHeight },
+      point2: { x: internalWidth/2 + panelThickness, y: internalLength + 2 * panelThickness, z: baseZ + internalHeight + panelThickness },
       color: '#F5DEB3',
       type: 'panel'
     })
 
-    // Add cleats (simplified - just corner cleats for visualization)
-    const cleatWidth = 2.5
-    const cleatDepth = 3.5
-
-    // Front panel cleats
-    this.boxes.push({
-      name: 'FRONT_CLEAT_LEFT',
-      point1: { x: -internalWidth/2 - panelThickness, y: 0, z: baseZ },
-      point2: { x: -internalWidth/2 - panelThickness + cleatWidth, y: cleatDepth, z: baseZ + internalHeight },
-      color: '#8B4513',
-      type: 'cleat'
-    })
-    this.boxes.push({
-      name: 'FRONT_CLEAT_RIGHT',
-      point1: { x: internalWidth/2 + panelThickness - cleatWidth, y: 0, z: baseZ },
-      point2: { x: internalWidth/2 + panelThickness, y: cleatDepth, z: baseZ + internalHeight },
-      color: '#8B4513',
-      type: 'cleat'
-    })
+    // Cleats disabled for now - need proper implementation
+    // TODO: Add proper cleat configuration and placement
   }
 
   getBoxes(): NXBox[] {
@@ -576,7 +585,7 @@ export class NXGenerator {
     output += '# - Symmetric placement: larger boards outside, smaller toward center\n'
     output += '# - 1" clearance from front and back edges for panel/cleat space\n'
     output += '# - Custom boards may be created to fill remaining gaps\n'
-    output += `# - Active floorboards: ${this.expressions.get('floorboard_count')} out of 20 total\n`
+    output += `# - Active floorboards: ${this.expressions.get('floorboard_count')} out of 40 total\n`
 
     const layout = this.getFloorboardLayout()
     const lumberSizes = [...new Set(layout.map(b => b.nominal))].join(', ')

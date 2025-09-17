@@ -10,7 +10,10 @@ export default function Home() {
     length: '135',
     width: '135',
     height: '135',
-    weight: '10000'
+    weight: '10000',
+    sideClearance: '2',
+    endClearance: '2',
+    topClearance: '3'
   })
 
   // State for 3x4 lumber permission toggle
@@ -49,7 +52,7 @@ export default function Home() {
     },
     materials: {
       skidSize: '4x4',
-      panelThickness: 0.75,
+      panelThickness: 1,
       cleatSize: '2x4',
       allow3x4Lumber: false
     }
@@ -89,10 +92,20 @@ export default function Home() {
     debounceTimeoutRef.current[field] = setTimeout(() => {
       const numValue = parseFloat(value)
       if (!isNaN(numValue) && numValue >= 0) {
-        setConfig(prev => ({
-          ...prev,
-          product: { ...prev.product, [field]: numValue }
-        }))
+        // Check if it's a clearance field or product field
+        if (field === 'sideClearance' || field === 'endClearance' || field === 'topClearance') {
+          const clearanceField = field === 'sideClearance' ? 'side' :
+                                 field === 'endClearance' ? 'end' : 'top'
+          setConfig(prev => ({
+            ...prev,
+            clearances: { ...prev.clearances, [clearanceField]: numValue }
+          }))
+        } else {
+          setConfig(prev => ({
+            ...prev,
+            product: { ...prev.product, [field]: numValue }
+          }))
+        }
       }
     }, 500) // 500ms delay before updating config
   }
@@ -102,10 +115,20 @@ export default function Home() {
     const value = inputValues[field]
     const numValue = parseFloat(value)
     if (!isNaN(numValue) && numValue >= 0) {
-      setConfig(prev => ({
-        ...prev,
-        product: { ...prev.product, [field]: numValue }
-      }))
+      // Check if it's a clearance field or product field
+      if (field === 'sideClearance' || field === 'endClearance' || field === 'topClearance') {
+        const clearanceField = field === 'sideClearance' ? 'side' :
+                               field === 'endClearance' ? 'end' : 'top'
+        setConfig(prev => ({
+          ...prev,
+          clearances: { ...prev.clearances, [clearanceField]: numValue }
+        }))
+      } else {
+        setConfig(prev => ({
+          ...prev,
+          product: { ...prev.product, [field]: numValue }
+        }))
+      }
     }
   }
 
@@ -221,6 +244,43 @@ export default function Home() {
                     value={inputValues.weight}
                     onChange={(e) => handleInputChange('weight', e.target.value)}
                     onBlur={() => handleInputBlur('weight')}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Clearances */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold mb-4">Clearances</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Side Clearance (inches)</label>
+                  <input
+                    type="text"
+                    value={inputValues.sideClearance}
+                    onChange={(e) => handleInputChange('sideClearance', e.target.value)}
+                    onBlur={() => handleInputBlur('sideClearance')}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">End Clearance (inches)</label>
+                  <input
+                    type="text"
+                    value={inputValues.endClearance}
+                    onChange={(e) => handleInputChange('endClearance', e.target.value)}
+                    onBlur={() => handleInputBlur('endClearance')}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Top Clearance (inches)</label>
+                  <input
+                    type="text"
+                    value={inputValues.topClearance}
+                    onChange={(e) => handleInputChange('topClearance', e.target.value)}
+                    onBlur={() => handleInputBlur('topClearance')}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                   />
                 </div>

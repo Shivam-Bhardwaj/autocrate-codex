@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Box, Grid, Text, Html } from '@react-three/drei'
+import { OrbitControls, Box, Grid, Text, Html, Edges } from '@react-three/drei'
 import { NXBox } from '@/lib/nx-generator'
 import { Suspense, useState } from 'react'
 
@@ -58,9 +58,16 @@ function NXBoxMesh({ box }: { box: NXBox }) {
       >
         <meshStandardMaterial
           color={box.color || '#8B4513'}
-          opacity={box.type === 'panel' ? 0.7 : 1}
-          transparent={box.type === 'panel'}
+          opacity={1}
+          transparent={false}
         />
+        {/* Add edges for panels to make them more distinguishable */}
+        {box.type === 'panel' && (
+          <Edges
+            color="#2a2a2a"
+            scale={1.001}
+          />
+        )}
       </Box>
 
       {hovered && (
@@ -104,20 +111,9 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
           <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
           <pointLight position={[-10, -10, -10]} intensity={0.5} />
 
-          {/* Grid for reference - Floor plane (horizontal) */}
-          {showGrid && (
-            <>
-              {/* Main grid on floor */}
-              <gridHelper args={[20, 20, '#444444', '#888888']} position={[0, 0, 0]} />
-              {/* Alternative: using a plane mesh */}
-              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-                <planeGeometry args={[20, 20]} />
-                <meshBasicMaterial color="#f0f0f0" opacity={0.5} transparent />
-              </mesh>
-            </>
-          )}
+          {/* Removed grid - was distracting from the crate visualization */}
 
-          {/* Coordinate axes - small reference arrows */}
+          {/* Coordinate axes - small reference arrows at origin */}
           {showLabels && (
             <>
               {/* X axis - Red */}
@@ -146,7 +142,7 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
                 Z
               </Text>
 
-              {/* Z axis - Blue (Y in NX) */}
+              {/* Z axis - Blue (Y in NX) - pointing backward */}
               <mesh position={[0, 0.1, -0.5]}>
                 <boxGeometry args={[0.02, 0.02, 1]} />
                 <meshBasicMaterial color="blue" />
