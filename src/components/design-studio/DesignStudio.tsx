@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { type Path, useForm } from 'react-hook-form'
 import { crateConfigurationSchema, CrateConfigurationInput } from '@/lib/validation/schema'
 import { useDesignStore } from '@/stores/design-store'
 import { Button } from '@/components/ui/button'
@@ -22,7 +21,6 @@ export function DesignStudio() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const form = useForm<CrateConfigurationInput>({
-    resolver: zodResolver(crateConfigurationSchema),
     defaultValues: useMemo(
       () => ({
         name: configuration.name,
@@ -37,37 +35,61 @@ export function DesignStudio() {
 
   const onSubmit = useCallback(
     async (values: CrateConfigurationInput) => {
+      form.clearErrors()
+      setStatusMessage(null)
+
+      const parsed = await crateConfigurationSchema.safeParseAsync(values)
+      if (!parsed.success) {
+        parsed.error.issues.forEach((issue) => {
+          if (!issue.path.length) {
+            return
+          }
+
+          const fieldPath = issue.path.join('.') as Path<CrateConfigurationInput>
+          form.setError(fieldPath, { type: issue.code, message: issue.message })
+        })
+
+        setStatusMessage('Please correct the highlighted fields before submitting.')
+        return
+      }
+
       setIsSubmitting(true)
       setStatusMessage('Generating CAD preview…')
 
       const mergedConfig = {
         ...configuration,
-        ...values,
-        product: { ...values.product },
-        clearances: { ...values.clearances },
-        skids: { ...values.skids },
-        materials: { ...values.materials }
+        ...parsed.data,
+        product: { ...parsed.data.product },
+        clearances: { ...parsed.data.clearances },
+        skids: { ...parsed.data.skids },
+        materials: { ...parsed.data.materials }
       }
 
-      setConfiguration(mergedConfig)
+      try {
+        setConfiguration(mergedConfig)
 
-      const cad = await generateCadModel(mergedConfig)
-      setStatusMessage('Queuing NX expression job…')
+        const cad = await generateCadModel(mergedConfig)
+        setStatusMessage('Queuing NX expression job…')
 
-      const job = await requestExpressionGeneration(mergedConfig)
+        const job = await requestExpressionGeneration(mergedConfig)
 
-      const design: CrateDesign = {
-        configuration: mergedConfig,
-        estimatedCost: 1250,
-        materialEfficiency: 88,
-        lastValidatedAt: new Date().toISOString()
+        const design: CrateDesign = {
+          configuration: mergedConfig,
+          estimatedCost: 1250,
+          materialEfficiency: 88,
+          lastValidatedAt: new Date().toISOString()
+        }
+
+        recordDesign(design)
+        setStatusMessage(`NX job ${job.id} queued. Geometry handle: ${cad.geometryHandle}`)
+      } catch (error) {
+        console.error('Failed to submit crate design', error)
+        setStatusMessage('Failed to generate NX expressions. Please try again.')
+      } finally {
+        setIsSubmitting(false)
       }
-
-      recordDesign(design)
-      setStatusMessage(`NX job ${job.id} queued. Geometry handle: ${cad.geometryHandle}`)
-      setIsSubmitting(false)
     },
-    [configuration, recordDesign, setConfiguration]
+    [configuration, form, recordDesign, setConfiguration]
   )
 
   return (
