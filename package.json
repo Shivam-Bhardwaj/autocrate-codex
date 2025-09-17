@@ -9,12 +9,12 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
+    "pretest": "node tests/validate-next-config.mjs",
     "test": "playwright test",
     "test:ci": "playwright test --reporter=line",
     "prepare": "husky install"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.3.4",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-tabs": "^1.0.4",
