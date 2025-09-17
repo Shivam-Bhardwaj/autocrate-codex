@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import CrateVisualizer from '@/components/CrateVisualizer'
 import { NXGenerator, CrateConfig } from '@/lib/nx-generator'
 
@@ -34,6 +34,7 @@ export default function Home() {
 
   const [generator, setGenerator] = useState<NXGenerator>(() => new NXGenerator(config))
   const [activeTab, setActiveTab] = useState<'visualization' | 'expressions' | 'bom'>('visualization')
+  const debounceTimeoutRef = useRef<{ [key: string]: NodeJS.Timeout }>({})
 
   // Update generator when config changes
   useEffect(() => {
@@ -44,7 +45,26 @@ export default function Home() {
     // Update input value immediately
     setInputValues(prev => ({ ...prev, [field]: value }))
 
-    // Parse and update config if valid number
+    // Clear existing timeout for this field
+    if (debounceTimeoutRef.current[field]) {
+      clearTimeout(debounceTimeoutRef.current[field])
+    }
+
+    // Debounce the config update
+    debounceTimeoutRef.current[field] = setTimeout(() => {
+      const numValue = parseFloat(value)
+      if (!isNaN(numValue) && numValue >= 0) {
+        setConfig(prev => ({
+          ...prev,
+          product: { ...prev.product, [field]: numValue }
+        }))
+      }
+    }, 500) // 500ms delay before updating config
+  }
+
+  const handleInputBlur = (field: keyof typeof inputValues) => {
+    // Immediately update config on blur
+    const value = inputValues[field]
     const numValue = parseFloat(value)
     if (!isNaN(numValue) && numValue >= 0) {
       setConfig(prev => ({
@@ -100,6 +120,7 @@ export default function Home() {
                     type="text"
                     value={inputValues.length}
                     onChange={(e) => handleInputChange('length', e.target.value)}
+                    onBlur={() => handleInputBlur('length')}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                   />
                 </div>
@@ -109,6 +130,7 @@ export default function Home() {
                     type="text"
                     value={inputValues.width}
                     onChange={(e) => handleInputChange('width', e.target.value)}
+                    onBlur={() => handleInputBlur('width')}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                   />
                 </div>
@@ -118,6 +140,7 @@ export default function Home() {
                     type="text"
                     value={inputValues.height}
                     onChange={(e) => handleInputChange('height', e.target.value)}
+                    onBlur={() => handleInputBlur('height')}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                   />
                 </div>
@@ -127,6 +150,7 @@ export default function Home() {
                     type="text"
                     value={inputValues.weight}
                     onChange={(e) => handleInputChange('weight', e.target.value)}
+                    onBlur={() => handleInputBlur('weight')}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                   />
                 </div>
