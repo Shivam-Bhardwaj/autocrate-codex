@@ -9,6 +9,7 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
+    "pretest": "node tests/validate-next-config.mjs",
     "test": "playwright test",
     "test:ci": "playwright test --reporter=line",
     "prepare": "husky install"
