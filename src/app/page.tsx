@@ -7,18 +7,40 @@ import { NXGenerator, CrateConfig } from '@/lib/nx-generator'
 export default function Home() {
   // Store input values as strings for better input handling
   const [inputValues, setInputValues] = useState({
-    length: '40',
-    width: '30',
-    height: '50',
-    weight: '800'
+    length: '135',
+    width: '135',
+    height: '135',
+    weight: '10000'
+  })
+
+  // State for 3x4 lumber permission toggle
+  const [allow3x4Lumber, setAllow3x4Lumber] = useState(false)
+
+  // State for display options
+  const [displayOptions, setDisplayOptions] = useState({
+    // Component visibility toggles
+    visibility: {
+      skids: true,
+      floorboards: true,
+      panels: true,
+      cleats: true,
+      top: true
+    },
+    // Lumber size preferences
+    lumberSizes: {
+      '2x6': true,
+      '2x8': true,
+      '2x10': true,
+      '2x12': true
+    }
   })
 
   const [config, setConfig] = useState<CrateConfig>({
     product: {
-      length: 40,
-      width: 30,
-      height: 50,
-      weight: 800
+      length: 135,
+      width: 135,
+      height: 135,
+      weight: 10000
     },
     clearances: {
       side: 2,
@@ -28,7 +50,8 @@ export default function Home() {
     materials: {
       skidSize: '4x4',
       panelThickness: 0.75,
-      cleatSize: '2x4'
+      cleatSize: '2x4',
+      allow3x4Lumber: false
     }
   })
 
@@ -36,10 +59,22 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'visualization' | 'expressions' | 'bom'>('visualization')
   const debounceTimeoutRef = useRef<{ [key: string]: NodeJS.Timeout }>({})
 
-  // Update generator when config changes
+  // Update generator when config changes or 3x4 lumber permission changes
   useEffect(() => {
-    setGenerator(new NXGenerator(config))
-  }, [config])
+    // Filter available lumber sizes based on toggles
+    const availableLumber = Object.entries(displayOptions.lumberSizes)
+      .filter(([_size, enabled]) => enabled)
+      .map(([size, _enabled]) => size as '2x6' | '2x8' | '2x10' | '2x12')
+
+    setGenerator(new NXGenerator({
+      ...config,
+      materials: {
+        ...config.materials,
+        allow3x4Lumber: allow3x4Lumber,
+        availableLumber: availableLumber
+      }
+    }))
+  }, [config, allow3x4Lumber, displayOptions.lumberSizes])
 
   const handleInputChange = (field: keyof typeof inputValues, value: string) => {
     // Update input value immediately
@@ -96,6 +131,41 @@ export default function Home() {
     a.download = `crate_bom_${Date.now()}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // Helper functions for display options
+  const toggleComponentVisibility = (component: keyof typeof displayOptions.visibility) => {
+    setDisplayOptions(prev => ({
+      ...prev,
+      visibility: {
+        ...prev.visibility,
+        [component]: !prev.visibility[component]
+      }
+    }))
+  }
+
+  const toggleLumberSize = (size: keyof typeof displayOptions.lumberSizes) => {
+    setDisplayOptions(prev => ({
+      ...prev,
+      lumberSizes: {
+        ...prev.lumberSizes,
+        [size]: !prev.lumberSizes[size]
+      }
+    }))
+  }
+
+  // Filter boxes based on visibility settings
+  const getFilteredBoxes = () => {
+    return generator.getBoxes().filter(box => {
+      // Check component visibility
+      if (box.type === 'skid' && !displayOptions.visibility.skids) return false
+      if (box.type === 'floor' && !displayOptions.visibility.floorboards) return false
+      if (box.type === 'panel' && !displayOptions.visibility.panels) return false
+      if (box.type === 'cleat' && !displayOptions.visibility.cleats) return false
+      if (box.name === 'TOP_PANEL' && !displayOptions.visibility.top) return false
+
+      return true
+    })
   }
 
   return (
@@ -157,6 +227,36 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Material Options */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold mb-4">Material Options</h2>
+              <div className="flex items-center justify-between">
+                <label htmlFor="allow3x4" className="text-sm font-medium text-gray-700">
+                  Allow 3x4 Lumber
+                </label>
+                <button
+                  id="allow3x4"
+                  onClick={() => setAllow3x4Lumber(!allow3x4Lumber)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    allow3x4Lumber ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  role="switch"
+                  aria-checked={allow3x4Lumber}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      allow3x4Lumber ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {allow3x4Lumber
+                  ? '3x4 lumber will be used for products under 500 lbs'
+                  : '4x4 lumber will be used for all products under 4500 lbs'}
+              </p>
+            </div>
+
             {/* Calculated Dimensions */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4">Calculated Dimensions</h2>
@@ -177,6 +277,63 @@ export default function Home() {
                   <span className="text-gray-600">Skid Size:</span>
                   <span className="font-medium">{generator.getExpressions().get('skid_width')?.toFixed(1)}"</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Display Options */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold mb-4">Display Options</h2>
+
+              {/* Component Visibility Toggles */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Component Visibility</h3>
+                <div className="space-y-3">
+                  {Object.entries(displayOptions.visibility).map(([component, isVisible]) => (
+                    <div key={component} className="flex items-center justify-between">
+                      <label className="text-sm text-gray-600 capitalize">
+                        {component === 'top' ? 'Top Panel' : component}
+                      </label>
+                      <button
+                        onClick={() => toggleComponentVisibility(component as keyof typeof displayOptions.visibility)}
+                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          isVisible ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                        role="switch"
+                        aria-checked={isVisible}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            isVisible ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lumber Size Selection */}
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Preferred Floorboard Sizes</h3>
+                <div className="space-y-2">
+                  {Object.entries(displayOptions.lumberSizes).map(([size, isSelected]) => (
+                    <div key={size} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id={size}
+                        checked={isSelected}
+                        onChange={() => toggleLumberSize(size as keyof typeof displayOptions.lumberSizes)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor={size} className="ml-2 text-sm text-gray-600">
+                        {size} Lumber
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  System will automatically select the most appropriate size based on weight and span requirements.
+                </p>
               </div>
             </div>
 
@@ -243,7 +400,7 @@ export default function Home() {
               <div className="p-6">
                 {activeTab === 'visualization' && (
                   <div className="h-[600px]">
-                    <CrateVisualizer boxes={generator.getBoxes()} />
+                    <CrateVisualizer boxes={getFilteredBoxes()} />
                     <p className="text-sm text-gray-600 mt-2">
                       Rotate: Left click + drag | Pan: Right click + drag | Zoom: Scroll
                     </p>

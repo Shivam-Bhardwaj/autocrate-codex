@@ -5,6 +5,38 @@ All notable changes to AutoCrate NX Generator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-09-17
+
+### Added
+
+#### Enhanced Skid and Floorboard System
+- **Proper Skid Sizing** - Implemented weight-based skid sizing according to Table 5-3 standards
+- **Skid Spacing Calculations** - Added precise skid spacing based on Table 5-4 requirements
+- **Single Skid Component** - Unified skid generation with pattern parameters for NX CAD
+- **Individual Floorboard Components** - 20 separate floorboard components with suppression capability
+- **Optimized Floorboard Layout** - Large boards on outside, narrow boards in center for material efficiency
+
+#### UI and Control Improvements
+- **Lumber Size Selection** - Interactive UI for selecting lumber dimensions (2x4, 2x6, 2x8, 2x10, 2x12)
+- **Component Visibility Toggles** - Individual controls for showing/hiding skids, floorboards, and panels
+- **Hover Tooltips** - Enhanced 3D visualization with interactive tooltips for components
+- **Default Dimensions** - Set to 135" cube for maximum shipping size demonstration
+
+#### Technical Enhancements
+- **Fixed Panel Positioning** - Panels now properly positioned relative to skid height
+- **Component Organization** - Improved structure for better NX CAD integration
+- **Enhanced Documentation** - Updated inline comments and component descriptions
+
+### Changed
+- Updated default crate dimensions to 135x135x135 inches for maximum size example
+- Improved floorboard arrangement algorithm for better material utilization
+- Enhanced 3D rendering performance with optimized component visibility
+
+### Fixed
+- Panel positioning now accounts for skid height offset
+- Floorboard suppression logic for proper NX CAD pattern generation
+- Component naming consistency across all generated elements
+
 ## [1.0.0] - 2025-09-17
 
 ### Added

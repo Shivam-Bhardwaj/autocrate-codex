@@ -1,9 +1,9 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Box, Grid, Text } from '@react-three/drei'
+import { OrbitControls, Box, Grid, Text, Html } from '@react-three/drei'
 import { NXBox } from '@/lib/nx-generator'
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 
 interface CrateVisualizerProps {
   boxes: NXBox[]
@@ -13,6 +13,7 @@ interface CrateVisualizerProps {
 
 // Component to render a single box from NX two-point definition
 function NXBoxMesh({ box }: { box: NXBox }) {
+  const [hovered, setHovered] = useState(false)
   // Calculate center and size from two diagonal points
   const center = {
     x: (box.point1.x + box.point2.x) / 2,
@@ -29,23 +30,104 @@ function NXBoxMesh({ box }: { box: NXBox }) {
   // Convert inches to display units (scale down for better viewing)
   const scale = 0.1
 
+  // Format dimensions for tooltip
+  const formatDimension = (value: number) => value.toFixed(2)
+  const dimensions = `${formatDimension(size.x)}" x ${formatDimension(size.z)}" x ${formatDimension(size.y)}"`
+
+  // Get material type based on component type
+  const getMaterialType = (type?: string) => {
+    switch (type) {
+      case 'skid':
+      case 'floor':
+      case 'cleat':
+        return 'LUMBER'
+      case 'panel':
+        return 'PLYWOOD'
+      default:
+        return 'LUMBER'
+    }
+  }
+
   return (
-    <Box
-      position={[center.x * scale, center.z * scale, -center.y * scale]}
-      args={[size.x * scale, size.z * scale, size.y * scale]}
-    >
-      <meshStandardMaterial
-        color={box.color || '#8B4513'}
-        opacity={box.type === 'panel' ? 0.7 : 1}
-        transparent={box.type === 'panel'}
-      />
-    </Box>
+    <group>
+      <Box
+        position={[center.x * scale, center.z * scale, -center.y * scale]}
+        args={[size.x * scale, size.z * scale, size.y * scale]}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <meshStandardMaterial
+          color={box.color || '#8B4513'}
+          opacity={box.type === 'panel' ? 0.7 : 1}
+          transparent={box.type === 'panel'}
+        />
+      </Box>
+
+      {hovered && (
+        <Html
+          position={[center.x * scale, (center.z * scale) + (size.z * scale / 2) + 0.5, -center.y * scale]}
+          center
+          distanceFactor={10}
+          occlude={false}
+        >
+          <div className="bg-gray-900 text-white text-sm rounded-lg p-3 shadow-lg pointer-events-none">
+            <div className="font-semibold text-center mb-1">{box.name}</div>
+            <div className="text-center mb-1">{dimensions}</div>
+            <div className="text-center text-gray-300">{getMaterialType(box.type)}</div>
+            {box.metadata && (
+              <div className="text-center text-xs text-gray-400 mt-1">{box.metadata}</div>
+            )}
+          </div>
+        </Html>
+      )}
+    </group>
   )
 }
 
 export default function CrateVisualizer({ boxes, showGrid = true, showLabels = true }: CrateVisualizerProps) {
+  const [tooltip, setTooltip] = useState<TooltipData>({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: ''
+  })
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Filter out suppressed components
+  const visibleBoxes = boxes.filter(box => !box.suppressed)
+
+  const handleMouseMove = (event: React.MouseEvent) => {
+    if (tooltip.visible) {
+      setTooltip(prev => ({
+        ...prev,
+        x: event.clientX,
+        y: event.clientY
+      }))
+    }
+  }
+
+  const handleBoxHover = (content: string) => {
+    setTooltip({
+      visible: true,
+      x: 0,
+      y: 0,
+      content
+    })
+  }
+
+  const handleBoxLeave = () => {
+    setTooltip(prev => ({
+      ...prev,
+      visible: false
+    }))
+  }
+
   return (
-    <div className="w-full h-full bg-gray-100 rounded-lg">
+    <div
+      ref={containerRef}
+      className="w-full h-full bg-gray-100 rounded-lg relative"
+      onMouseMove={handleMouseMove}
+    >
       <Canvas
         camera={{
           position: [15, 10, 15],
@@ -117,9 +199,14 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
             </>
           )}
 
-          {/* Render all boxes */}
-          {boxes.map((box, index) => (
-            <NXBoxMesh key={`${box.name}-${index}`} box={box} />
+          {/* Render visible boxes only (filter out suppressed) */}
+          {visibleBoxes.map((box, index) => (
+            <NXBoxMesh
+              key={`${box.name}-${index}`}
+              box={box}
+              onHover={handleBoxHover}
+              onLeave={handleBoxLeave}
+            />
           ))}
 
           {/* Controls */}
@@ -133,6 +220,22 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
           />
         </Suspense>
       </Canvas>
+
+      {/* Tooltip */}
+      {tooltip.visible && (
+        <div
+          className="absolute pointer-events-none z-10 bg-gray-900 text-white text-sm rounded-lg p-3 shadow-lg transition-opacity duration-200 ease-in-out"
+          style={{
+            left: tooltip.x + 10,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="whitespace-pre-line font-mono">
+            {tooltip.content}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
