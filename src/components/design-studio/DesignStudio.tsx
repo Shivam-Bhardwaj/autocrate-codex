@@ -38,7 +38,43 @@ export function DesignStudio() {
       form.clearErrors()
       setStatusMessage(null)
 
-      const parsed = await crateConfigurationSchema.safeParseAsync(values)
+      const overrides: Partial<CrateConfigurationInput> = values
+
+      const candidateConfig: CrateConfigurationInput = {
+        name: overrides.name ?? configuration.name,
+        product: {
+          ...configuration.product,
+          ...overrides.product
+        },
+        clearances: {
+          ...configuration.clearances,
+          ...overrides.clearances
+        },
+        skids: {
+          ...configuration.skids,
+          ...overrides.skids,
+          overhang: {
+            ...configuration.skids.overhang,
+            ...overrides.skids?.overhang
+          }
+        },
+        materials: {
+          lumber: {
+            ...configuration.materials.lumber,
+            ...overrides.materials?.lumber
+          },
+          plywood: {
+            ...configuration.materials.plywood,
+            ...overrides.materials?.plywood
+          },
+          hardware: {
+            ...configuration.materials.hardware,
+            ...overrides.materials?.hardware
+          }
+        }
+      }
+
+      const parsed = await crateConfigurationSchema.safeParseAsync(candidateConfig)
       if (!parsed.success) {
         parsed.error.issues.forEach((issue) => {
           if (!issue.path.length) {
