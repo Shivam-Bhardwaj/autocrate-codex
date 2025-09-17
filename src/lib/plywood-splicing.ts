@@ -71,27 +71,11 @@ export class PlywoodSplicer {
     panelWidth: number,
     panelHeight: number,
     panelName: string,
-    allowRotation: boolean = true
+    allowRotation: boolean = false // Disabled by default to maintain vertical splicing
   ): PanelSpliceLayout {
-    // Calculate layouts for both orientations
-    const normalLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
-
-    if (!allowRotation) {
-      return normalLayout
-    }
-
-    // Try rotated orientation (96x48 instead of 48x96)
-    const rotatedLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, true)
-
-    // Choose the layout with fewer sheets or better efficiency
-    if (rotatedLayout.sheetCount < normalLayout.sheetCount) {
-      return rotatedLayout
-    } else if (rotatedLayout.sheetCount === normalLayout.sheetCount) {
-      // If same sheet count, prefer fewer splices
-      return rotatedLayout.splices.length <= normalLayout.splices.length ? rotatedLayout : normalLayout
-    }
-
-    return normalLayout
+    // For structural integrity, we prefer vertical splices over horizontal
+    // Only use normal orientation to ensure vertical splices on right
+    return this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
   }
 
   /**
@@ -199,8 +183,9 @@ export class PlywoodSplicer {
   }
 
   /**
-   * Calculate splicing for all 6 panels of a crate with rotation optimization
+   * Calculate splicing for all 6 panels of a crate
    * Returns layouts for: Front, Back, Left, Right, Top, Bottom(optional)
+   * Maintains vertical splicing for structural integrity
    */
   static calculateCrateSplicing(
     frontWidth: number,
@@ -210,24 +195,24 @@ export class PlywoodSplicer {
     topWidth: number,
     topLength: number,
     includeBottom: boolean = false,
-    allowRotation: boolean = true
+    allowRotation: boolean = false // Disabled to ensure vertical splices
   ): PanelSpliceLayout[] {
     const layouts: PanelSpliceLayout[] = []
 
-    // Front and Back panels (same dimensions)
-    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL', allowRotation))
-    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL', allowRotation))
+    // Front and Back panels (same dimensions) - vertical splices on right
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL', false))
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL', false))
 
-    // Left and Right side panels (same dimensions)
-    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL', allowRotation))
-    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL', allowRotation))
+    // Left and Right side panels (same dimensions) - vertical splices on right
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL', false))
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL', false))
 
-    // Top panel
-    layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'TOP_PANEL', allowRotation))
+    // Top panel - vertical splices on right
+    layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'TOP_PANEL', false))
 
     // Bottom panel (optional - typically not used in crates with floorboards)
     if (includeBottom) {
-      layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL', allowRotation))
+      layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL', false))
     }
 
     return layouts
