@@ -154,7 +154,7 @@ export class CleatCalculator {
     const minCleats = Math.ceil(availableWidth / this.MAX_CLEAT_SPACING) - 1 // -1 because we have edge cleats
 
     if (minCleats > 0) {
-      // When rotated or needing symmetry, distribute evenly
+      // Always distribute evenly for symmetry, especially important when rotated
       const spacing = availableWidth / (minCleats + 1)
 
       for (let i = 0; i < minCleats; i++) {

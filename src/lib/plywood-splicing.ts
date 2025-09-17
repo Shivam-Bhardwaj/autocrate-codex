@@ -71,11 +71,30 @@ export class PlywoodSplicer {
     panelWidth: number,
     panelHeight: number,
     panelName: string,
-    allowRotation: boolean = false // Disabled by default to maintain vertical splicing
+    allowRotation: boolean = true
   ): PanelSpliceLayout {
-    // For structural integrity, we prefer vertical splices over horizontal
-    // Only use normal orientation to ensure vertical splices on right
-    return this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
+    if (!allowRotation) {
+      return this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
+    }
+
+    // Calculate both orientations
+    const normalLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, false)
+    const rotatedLayout = this.calculateSpliceLayout(panelWidth, panelHeight, panelName, true)
+
+    // Smart rotation decision:
+    // 1. If rotation eliminates ALL splices (single sheet), use it
+    if (rotatedLayout.sheetCount === 1 && rotatedLayout.splices.length === 0) {
+      return rotatedLayout
+    }
+
+    // 2. If rotation significantly reduces sheets (more than 50% reduction), consider it
+    if (rotatedLayout.sheetCount < normalLayout.sheetCount * 0.5) {
+      return rotatedLayout
+    }
+
+    // 3. Otherwise, prefer vertical splicing for structural integrity
+    // Vertical splices (on the right) are stronger than horizontal splices
+    return normalLayout
   }
 
   /**
@@ -185,7 +204,7 @@ export class PlywoodSplicer {
   /**
    * Calculate splicing for all 6 panels of a crate
    * Returns layouts for: Front, Back, Left, Right, Top, Bottom(optional)
-   * Maintains vertical splicing for structural integrity
+   * Uses smart rotation optimization while maintaining structural integrity
    */
   static calculateCrateSplicing(
     frontWidth: number,
@@ -195,24 +214,27 @@ export class PlywoodSplicer {
     topWidth: number,
     topLength: number,
     includeBottom: boolean = false,
-    allowRotation: boolean = false // Disabled to ensure vertical splices
+    allowRotation: boolean = true // Enable smart rotation optimization
   ): PanelSpliceLayout[] {
     const layouts: PanelSpliceLayout[] = []
 
-    // Front and Back panels (same dimensions) - vertical splices on right
-    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL', false))
-    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL', false))
+    // Front and Back panels (same dimensions)
+    // Will rotate only if it eliminates splices or significantly reduces sheets
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'FRONT_PANEL', allowRotation))
+    layouts.push(this.calculateOptimizedSpliceLayout(frontWidth, frontHeight, 'BACK_PANEL', allowRotation))
 
-    // Left and Right side panels (same dimensions) - vertical splices on right
-    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL', false))
-    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL', false))
+    // Left and Right side panels (same dimensions)
+    // Will rotate only if it eliminates splices or significantly reduces sheets
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'LEFT_END_PANEL', allowRotation))
+    layouts.push(this.calculateOptimizedSpliceLayout(sideWidth, sideHeight, 'RIGHT_END_PANEL', allowRotation))
 
-    // Top panel - vertical splices on right
-    layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'TOP_PANEL', false))
+    // Top panel
+    // Will rotate only if it eliminates splices or significantly reduces sheets
+    layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'TOP_PANEL', allowRotation))
 
     // Bottom panel (optional - typically not used in crates with floorboards)
     if (includeBottom) {
-      layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL', false))
+      layouts.push(this.calculateOptimizedSpliceLayout(topWidth, topLength, 'BOTTOM_PANEL', allowRotation))
     }
 
     return layouts
