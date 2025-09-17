@@ -608,17 +608,40 @@ export class NXGenerator {
       note: `Min 3.5" height required for forklift access. Single component patterned ${skidCount} times.`
     })
 
-    // Floorboards (individual lumber pieces)
-    const floorboardDims = this.getFloorboardDimensions()
-    const floorboardCount = this.getFloorboardCount()
-    bom.push({
-      item: 'Floorboard',
-      size: `${floorboardDims.nominal} (${floorboardDims.width}" x ${floorboardDims.thickness}")`,
-      length: internalWidth,
-      quantity: floorboardCount,
-      material: 'Lumber',
-      note: `${floorboardCount} active boards out of 20 total components. Boards run perpendicular to skids.`
-    })
+    // Floorboards (individual lumber pieces with varied sizes)
+    const floorboardLayout = this.getFloorboardLayout()
+    const floorboardCount = floorboardLayout.length
+
+    // Group floorboards by size for BOM
+    const floorboardGroups = new Map<string, { count: number, width: number, thickness: number, isCustom: boolean }>()
+
+    for (const board of floorboardLayout) {
+      const key = board.nominal
+      if (floorboardGroups.has(key)) {
+        floorboardGroups.get(key)!.count++
+      } else {
+        floorboardGroups.set(key, {
+          count: 1,
+          width: board.width,
+          thickness: board.thickness,
+          isCustom: board.isCustom || false
+        })
+      }
+    }
+
+    // Add each floorboard size group to BOM
+    for (const [nominal, group] of floorboardGroups) {
+      bom.push({
+        item: group.isCustom ? 'Custom Floorboard' : 'Floorboard',
+        size: `${nominal} (${group.width.toFixed(2)}" x ${group.thickness}")`,
+        length: internalWidth,
+        quantity: group.count,
+        material: 'Lumber',
+        note: group.isCustom
+          ? `Custom cut board. ${group.count} piece${group.count > 1 ? 's' : ''} needed.`
+          : `Standard lumber. ${group.count} piece${group.count > 1 ? 's' : ''} of ${floorboardCount} total boards.`
+      })
+    }
 
     // Panels
     bom.push({
