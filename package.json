@@ -28,8 +28,8 @@
     "react-hook-form": "^7.51.4",
     "tailwind-merge": "^2.3.0",
     "three": "^0.166.1",
-    "zustand": "^4.5.2",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zustand": "^4.5.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
@@ -41,6 +41,7 @@
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.5",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-tailwindcss": "^3.14.2",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2",

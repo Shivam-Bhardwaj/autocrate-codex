@@ -2,9 +2,9 @@ import Link from 'next/link'
 import { ReactNode } from 'react'
 
 const navItems = [
-  { href: '/(dashboard)/design', label: 'Design Studio' },
-  { href: '/(dashboard)/library', label: 'Template Library' },
-  { href: '/(dashboard)/validation', label: 'Validation Center' }
+  { href: '/design', label: 'Design Studio' },
+  { href: '/library', label: 'Template Library' },
+  { href: '/validation', label: 'Validation Center' },
 ]
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
