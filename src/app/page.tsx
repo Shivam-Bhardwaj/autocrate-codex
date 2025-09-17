@@ -25,9 +25,12 @@ export default function Home() {
     visibility: {
       skids: true,
       floorboards: true,
-      panels: true,
-      cleats: true,
-      top: true
+      frontPanel: true,
+      backPanel: true,
+      leftPanel: true,
+      rightPanel: true,
+      topPanel: true,
+      cleats: true
     },
     // Lumber size preferences
     lumberSizes: {
@@ -184,9 +187,14 @@ export default function Home() {
       // Check component visibility
       if (box.type === 'skid' && !displayOptions.visibility.skids) return false
       if (box.type === 'floor' && !displayOptions.visibility.floorboards) return false
-      if (box.type === 'panel' && !displayOptions.visibility.panels) return false
       if (box.type === 'cleat' && !displayOptions.visibility.cleats) return false
-      if (box.name === 'TOP_PANEL' && !displayOptions.visibility.top) return false
+
+      // Individual panel visibility
+      if (box.name === 'FRONT_PANEL' && !displayOptions.visibility.frontPanel) return false
+      if (box.name === 'BACK_PANEL' && !displayOptions.visibility.backPanel) return false
+      if (box.name === 'LEFT_END_PANEL' && !displayOptions.visibility.leftPanel) return false
+      if (box.name === 'RIGHT_END_PANEL' && !displayOptions.visibility.rightPanel) return false
+      if (box.name === 'TOP_PANEL' && !displayOptions.visibility.topPanel) return false
 
       return true
     })
@@ -372,17 +380,29 @@ export default function Home() {
 
             {/* Component Visibility */}
             <div className="space-y-0.5 mb-1.5">
-              {Object.entries(displayOptions.visibility).map(([component, isVisible]) => (
-                <label key={component} className="flex items-center justify-between text-xs">
-                  <span className="capitalize">{component === 'top' ? 'Top Panel' : component}</span>
-                  <input
-                    type="checkbox"
-                    checked={isVisible}
-                    onChange={() => toggleComponentVisibility(component as keyof typeof displayOptions.visibility)}
-                    className="h-3 w-3"
-                  />
-                </label>
-              ))}
+              {Object.entries(displayOptions.visibility).map(([component, isVisible]) => {
+                // Format display names
+                const displayName = component === 'frontPanel' ? 'Front Panel' :
+                                   component === 'backPanel' ? 'Back Panel' :
+                                   component === 'leftPanel' ? 'Left Panel' :
+                                   component === 'rightPanel' ? 'Right Panel' :
+                                   component === 'topPanel' ? 'Top Panel' :
+                                   component === 'floorboards' ? 'Floorboards' :
+                                   component === 'skids' ? 'Skids' :
+                                   component === 'cleats' ? 'Cleats' : component;
+
+                return (
+                  <label key={component} className="flex items-center justify-between text-xs">
+                    <span>{displayName}</span>
+                    <input
+                      type="checkbox"
+                      checked={isVisible}
+                      onChange={() => toggleComponentVisibility(component as keyof typeof displayOptions.visibility)}
+                      className="h-3 w-3"
+                    />
+                  </label>
+                )
+              })}
             </div>
 
             {/* Lumber Sizes */}

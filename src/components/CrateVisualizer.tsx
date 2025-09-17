@@ -3,7 +3,7 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Box, Grid, Text, Html, Edges } from '@react-three/drei'
 import { NXBox } from '@/lib/nx-generator'
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useRef } from 'react'
 
 interface CrateVisualizerProps {
   boxes: NXBox[]
@@ -12,8 +12,8 @@ interface CrateVisualizerProps {
 }
 
 // Component to render a single box from NX two-point definition
-function NXBoxMesh({ box }: { box: NXBox }) {
-  const [hovered, setHovered] = useState(false)
+function NXBoxMesh({ box, hoveredBox, setHoveredBox }: { box: NXBox; hoveredBox: string | null; setHoveredBox: (name: string | null) => void }) {
+  const isHovered = hoveredBox === box.name
   // Calculate center and size from two diagonal points
   const center = {
     x: (box.point1.x + box.point2.x) / 2,
@@ -53,8 +53,14 @@ function NXBoxMesh({ box }: { box: NXBox }) {
       <Box
         position={[center.x * scale, center.z * scale, -center.y * scale]}
         args={[size.x * scale, size.z * scale, size.y * scale]}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          setHoveredBox(box.name)
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation()
+          setHoveredBox(null)
+        }}
       >
         <meshStandardMaterial
           color={box.color || '#8B4513'}
@@ -70,7 +76,7 @@ function NXBoxMesh({ box }: { box: NXBox }) {
         )}
       </Box>
 
-      {hovered && (
+      {isHovered && (
         <Html
           position={[center.x * scale, (center.z * scale) + (size.z * scale / 2) + 0.5, -center.y * scale]}
           center
@@ -92,8 +98,22 @@ function NXBoxMesh({ box }: { box: NXBox }) {
 }
 
 export default function CrateVisualizer({ boxes, showGrid = true, showLabels = true }: CrateVisualizerProps) {
-  // Filter out suppressed components
-  const visibleBoxes = boxes.filter(box => !box.suppressed)
+  // Filter out suppressed components and sort by render priority
+  // Render order: skids first, then floorboards, then panels (so panels get hover priority)
+  const visibleBoxes = boxes
+    .filter(box => !box.suppressed)
+    .sort((a, b) => {
+      const priority: { [key: string]: number } = {
+        'skid': 1,
+        'floor': 2,
+        'panel': 3,
+        'cleat': 4
+      }
+      const aPriority = priority[a.type || ''] || 5
+      const bPriority = priority[b.type || ''] || 5
+      return aPriority - bPriority
+    })
+  const [hoveredBox, setHoveredBox] = useState<string | null>(null)
 
   return (
     <div className="w-full h-full bg-gray-100 rounded-lg relative">
@@ -162,6 +182,8 @@ export default function CrateVisualizer({ boxes, showGrid = true, showLabels = t
             <NXBoxMesh
               key={`${box.name}-${index}`}
               box={box}
+              hoveredBox={hoveredBox}
+              setHoveredBox={setHoveredBox}
             />
           ))}
 

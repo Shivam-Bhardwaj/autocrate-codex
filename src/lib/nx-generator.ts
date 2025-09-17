@@ -507,6 +507,7 @@ export class NXGenerator {
     const floorboardThickness = this.expressions.get('floorboard_thickness')!
 
     const baseZ = skidHeight + floorboardThickness
+    const sideGroundClearance = 2  // 2 inches ground clearance for side panels
 
     // Front Panel (sits ON skids at z = skidHeight, Y = 0)
     this.boxes.push({
@@ -526,20 +527,24 @@ export class NXGenerator {
       type: 'panel'
     })
 
-    // Left Panel (touches outside of skids)
+    // Left Panel (side cap - fits between front and back panels, extends close to ground)
+    // Inner wall touches the outside of skids at x = -internalWidth/2
+    // Extends down to sideGroundClearance from ground (taller than front/back panels)
     this.boxes.push({
       name: 'LEFT_END_PANEL',
-      point1: { x: -internalWidth/2 - panelThickness, y: panelThickness, z: baseZ },
-      point2: { x: -internalWidth/2, y: internalLength + panelThickness, z: baseZ + internalHeight },
+      point1: { x: -internalWidth/2 - panelThickness, y: panelThickness, z: sideGroundClearance },
+      point2: { x: -internalWidth/2, y: internalLength + panelThickness, z: skidHeight + floorboardThickness + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
 
-    // Right Panel (touches outside of skids)
+    // Right Panel (side cap - fits between front and back panels, extends close to ground)
+    // Inner wall touches the outside of skids at x = internalWidth/2
+    // Extends down to sideGroundClearance from ground (taller than front/back panels)
     this.boxes.push({
       name: 'RIGHT_END_PANEL',
-      point1: { x: internalWidth/2, y: panelThickness, z: baseZ },
-      point2: { x: internalWidth/2 + panelThickness, y: internalLength + panelThickness, z: baseZ + internalHeight },
+      point1: { x: internalWidth/2, y: panelThickness, z: sideGroundClearance },
+      point2: { x: internalWidth/2 + panelThickness, y: internalLength + panelThickness, z: skidHeight + floorboardThickness + internalHeight },
       color: '#F5DEB3',
       type: 'panel'
     })
